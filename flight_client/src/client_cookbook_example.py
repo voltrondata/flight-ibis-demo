@@ -23,8 +23,6 @@ def main():
     total_rows = 0
     for chunk in reader:
         total_rows += chunk.data.num_rows
-        # Print sample row
-        print(chunk.data.take([0]).to_pandas())
     print("Got", total_rows, "rows total, expected", NUM_BATCHES * ROWS_PER_BATCH)
 
 

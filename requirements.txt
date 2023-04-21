@@ -1,1 +1,4 @@
 pyarrow==11.0.*
+click==8.1.*
+duckdb==0.7.*
+ibis-framework[duckdb]==5.1.*
