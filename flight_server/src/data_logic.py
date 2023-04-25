@@ -1,6 +1,8 @@
 import ibis
 from ibis import _
 from config import DUCKDB_DB_FILE
+from datetime import datetime
+
 
 # Constant
 INNER_JOIN = "inner"
@@ -9,9 +11,12 @@ MAX_ORDER_TOTALPRICE = 500_000.00
 MAX_PERCENT_RANK = 0.98
 
 
-def apply_golden_rules(hash_bucket_num: int,
-                       total_hash_buckets: int
-                       ) -> ibis.Expr:
+def get_golden_rule_facts(hash_bucket_num: int,
+                          total_hash_buckets: int,
+                          min_date: datetime,
+                          max_date: datetime,
+                          schema_only: bool = False
+                          ) -> ibis.Expr:
     # Get a read-only connection so it is thread-safe
     conn: ibis.BaseBackend = ibis.duckdb.connect(database=DUCKDB_DB_FILE, read_only=True)
 
@@ -30,11 +35,13 @@ def apply_golden_rules(hash_bucket_num: int,
                             .over(ibis.window(order_by=_.count_star))
                             )
                     .filter(_.order_count_percent_rank <= MAX_PERCENT_RANK)
+                    .filter(ibis.literal(schema_only) == False)
                     )
 
     # Filter orders to the hash bucket asked for
     # Filter out orders larger than MAX_ORDER_TOTALPRICE
     orders_prelim = (orders
+                     .filter(_.o_orderdate.between(lower=min_date, upper=max_date))
                      .alias("orders_sql")
                      .sql("SELECT orders_sql.*, hash(orders_sql.o_orderkey) AS hash_result FROM orders_sql")
                      .mutate(hash_bucket=(_.hash_result % total_hash_buckets))
@@ -87,6 +94,9 @@ def apply_golden_rules(hash_bucket_num: int,
 
 
 if __name__ == '__main__':
-    x = apply_golden_rules(hash_bucket_num=1,
-                           total_hash_buckets=11)
+    x = get_golden_rule_facts(hash_bucket_num=1,
+                              total_hash_buckets=11,
+                              min_date=datetime(year=1994, month=1, day=1),
+                              max_date=datetime(year=1997, month=12, day=31),
+                              schema_only=False)
     print(x.head(n=10).execute())

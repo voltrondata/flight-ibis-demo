@@ -1,21 +1,31 @@
 import click
-import pathlib
 import pyarrow as pa
 import pyarrow.flight
 import pyarrow.parquet
 from config import get_file_logger
-from data_logic import apply_golden_rules
+from data_logic import get_golden_rule_facts
+import json
+from munch import Munch, munchify
+from datetime import datetime
 
+
+# Constants
+MAX_THREADS: int = 10
+BEGINNING_OF_TIME: datetime = datetime(year=1775, month=11, day=10)
+END_OF_TIME: datetime = datetime(year=9999, month=12, day=25)   # Merry last Christmas!
 
 # Get a file based logger, b/c stdout logging doesn't work for a Python Flight server
 logger = get_file_logger()
 
 
 class FlightServer(pa.flight.FlightServerBase):
+    @property
+    def class_name(self):
+        return self.__class__.__name__
+
     def __init__(self, host="localhost", location=None,
                  tls_certificates=None, verify_client=False,
-                 root_certificates=None, auth_handler=None,
-                 repo=pathlib.Path("./datasets")
+                 root_certificates=None, auth_handler=None
                  ):
         super(FlightServer, self).__init__(
             location, auth_handler, tls_certificates, verify_client,
@@ -24,67 +34,72 @@ class FlightServer(pa.flight.FlightServerBase):
         self.host = host
         self.tls_certificates = tls_certificates
         self._location = location
-        self._repo = repo
         print(f"Serving on {self._location}")
 
-    def _make_flight_info(self, dataset):
-        dataset_path = self._repo / dataset
-        schema = pa.parquet.read_schema(dataset_path)
-        metadata = pa.parquet.read_metadata(dataset_path)
-        descriptor = pa.flight.FlightDescriptor.for_path(
-            dataset.encode('utf-8')
-        )
-        logger.info(msg=f"Descriptor: {descriptor}")
-        endpoints = [pa.flight.FlightEndpoint(dataset, [self._location])]
-        return pyarrow.flight.FlightInfo(schema,
-                                        descriptor,
-                                        endpoints,
-                                        metadata.num_rows,
-                                        metadata.serialized_size)
+    def _make_flight_info(self, command):
+        logger.debug(msg=f"{self.class_name}._make_flight_info - command: {command}")
 
-    def list_flights(self, context, criteria):
-        for dataset in self._repo.iterdir():
-            yield self._make_flight_info(dataset.name)
+        command_munch: Munch = munchify(x=json.loads(command))
+
+        command_munch.kwargs.total_hash_buckets = min(MAX_THREADS, command_munch.kwargs.num_threads)
+
+        descriptor = pa.flight.FlightDescriptor.for_command(
+            command=command_munch.command.encode('utf-8')
+        )
+        logger.debug(msg=f"{self.class_name}._make_flight_info - descriptor: {descriptor}")
+
+        endpoints = []
+        for i in range(1, (command_munch.kwargs.total_hash_buckets + 1)):
+            command_munch.kwargs.hash_bucket_num = i
+            endpoints.append(pa.flight.FlightEndpoint(json.dumps(command_munch.toDict()), [self._location]))
+
+        try:
+            schema = get_golden_rule_facts(hash_bucket_num=99999,
+                                           total_hash_buckets=1,
+                                           min_date=BEGINNING_OF_TIME,
+                                           max_date=BEGINNING_OF_TIME,
+                                           schema_only=True
+                                           ).to_pyarrow().schema
+        except Exception as e:
+            logger.error(msg=f"{self.class_name}._make_flight_info - Error: {str(e)}")
+        else:
+            return pyarrow.flight.FlightInfo(schema,
+                                             descriptor,
+                                             endpoints,
+                                             0,
+                                             0)
 
     def get_flight_info(self, context, descriptor):
-        return self._make_flight_info(descriptor.path[0].decode('utf-8'))
-
-    def do_put(self, context, descriptor, reader, writer):
-        dataset = descriptor.path[0].decode('utf-8')
-        dataset_path = self._repo / dataset
-        # Read the uploaded data and write to Parquet incrementally
-        with dataset_path.open("wb") as sink:
-            with pa.parquet.ParquetWriter(sink, reader.schema) as writer:
-                for chunk in reader:
-                    writer.write_table(pa.Table.from_batches([chunk.data]))
+        logger.debug(msg=f"{self.class_name}.get_flight_info - context={context}, descriptor={descriptor}")
+        return self._make_flight_info(descriptor.command.decode('utf-8'))
 
     def do_get(self, context, ticket):
-        logger.info(msg=f"ticket = {ticket}")
-        dataset = ticket.ticket.decode('utf-8')
-        # # Stream data from a file
-        # dataset_path = self._repo / dataset
-        # reader = pa.parquet.ParquetFile(dataset_path)
-        # return pa.flight.GeneratorStream(
-        #     reader.schema_arrow, reader.iter_batches())
-        reader = apply_golden_rules().to_pyarrow_batches()
-        return pa.flight.GeneratorStream(schema=reader.schema,
-                                         generator=reader
-                                         )
+        logger.debug(msg=f"{self.class_name}.do_get - context = {context}, ticket = {ticket}")
+        command_munch: Munch = munchify(x=json.loads(ticket.ticket.decode('utf-8')))
 
-    def list_actions(self, context):
-        return [
-            ("drop_dataset", "Delete a dataset."),
-        ]
+        command_kwargs = command_munch.kwargs
 
-    def do_action(self, context, action):
-        if action.type == "drop_dataset":
-            self.do_drop_dataset(action.body.to_pybytes().decode('utf-8'))
+        if command_munch.command == "get_golden_rule_facts":
+            try:
+                reader = get_golden_rule_facts(hash_bucket_num=command_kwargs.hash_bucket_num,
+                                               total_hash_buckets=command_kwargs.total_hash_buckets,
+                                               min_date=datetime.fromisoformat(command_kwargs.min_date),
+                                               max_date=datetime.fromisoformat(command_kwargs.max_date),
+                                               schema_only=False
+                                               ).to_pyarrow_batches()
+            except Exception as e:
+                error_message = f"{self.class_name}.get_flight_info - Error: {str(e)}"
+                logger.error(msg=error_message)
+                return pa.flight.FlightError(message=error_message)
+            else:
+                return pa.flight.GeneratorStream(schema=reader.schema,
+                                                 generator=reader
+                                                 )
         else:
-            raise NotImplementedError
+            error_message = f"{self.class_name}.get_flight_info - Command: {command_munch.command} is not supported."
+            logger.error(msg=error_message)
+            return pa.flight.FlightError(message=error_message)
 
-    def do_drop_dataset(self, dataset):
-        dataset_path = self._repo / dataset
-        dataset_path.unlink()
 
 @click.command()
 @click.option(
@@ -129,7 +144,6 @@ def main(host: str,
                           location=location,
                           tls_certificates=tls_certificates,
                           verify_client=verify_client)
-    server._repo.mkdir(exist_ok=True)
     server.serve()
 
 
