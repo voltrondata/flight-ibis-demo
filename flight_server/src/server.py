@@ -3,7 +3,7 @@ import pyarrow as pa
 import pyarrow.flight
 import pyarrow.parquet
 from config import get_logger, logging
-from data_logic import get_golden_rule_facts
+from data_logic_duckdb import get_golden_rule_facts
 import json
 from munch import Munch, munchify
 from datetime import datetime
@@ -100,6 +100,7 @@ class FlightServer(pa.flight.FlightServerBase):
                 dataset = get_golden_rule_facts(**golden_rule_kwargs)
             except Exception as e:
                 self.logger.exception(msg=f"{self.class_name}.get_flight_info - Exception: {str(e)}")
+                pass  # Do not re-raise the exception b/c it would terminate the server...
             else:
                 self.logger.debug(msg=f"{self.class_name}.get_flight_info - dataset rows: {dataset.num_rows}")
                 return pa.flight.RecordBatchStream(dataset)

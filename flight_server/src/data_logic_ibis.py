@@ -2,6 +2,7 @@ import ibis
 from ibis import _
 from config import DUCKDB_DB_FILE, get_logger
 from datetime import datetime
+import pyarrow
 
 
 # Constants
@@ -19,7 +20,7 @@ def get_golden_rule_facts(hash_bucket_num: int,
                           max_date: datetime,
                           schema_only: bool = False,
                           existing_logger = None
-                          ) -> ibis.Expr:
+                          ) -> pyarrow.Table:
     try:
         if existing_logger:
             logger = existing_logger
@@ -110,6 +111,7 @@ def get_golden_rule_facts(hash_bucket_num: int,
                              )
 
         logger.debug(f"get_golden_rule_facts - successfully built Ibis expression.")
+        logger.debug(f"get_golden_rule_facts - SQL for Ibis expression:\n{ibis.to_sql(golden_rule_facts)}")
 
         pyarrow_dataset = golden_rule_facts.to_pyarrow()
 
