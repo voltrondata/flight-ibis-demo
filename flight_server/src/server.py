@@ -7,7 +7,6 @@ from data_logic import get_golden_rule_facts
 import json
 from munch import Munch, munchify
 from datetime import datetime
-import gc
 
 
 # Constants
@@ -84,8 +83,6 @@ class FlightServer(pa.flight.FlightServerBase):
         return self._make_flight_info(descriptor.command.decode('utf-8'))
 
     def do_get(self, context, ticket):
-        gc.collect()
-
         self.logger.debug(msg=f"{self.class_name}.do_get - context = {context}, ticket = {ticket}")
         command_munch: Munch = munchify(x=json.loads(ticket.ticket.decode('utf-8')))
 

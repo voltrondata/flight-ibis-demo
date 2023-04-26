@@ -14,10 +14,10 @@ def main():
     command_dict = dict(command="get_golden_rule_facts",
                         kwargs=arg_dict
                         )
-    upload_descriptor = pa.flight.FlightDescriptor.for_command(command=json.dumps(command_dict))
+    command_descriptor = pa.flight.FlightDescriptor.for_command(command=json.dumps(command_dict))
 
     # Read content of the dataset
-    flight = client.get_flight_info(upload_descriptor)
+    flight = client.get_flight_info(command_descriptor)
     total_rows = 0
     for endpoint in flight.endpoints:
         reader = client.do_get(endpoint.ticket)
