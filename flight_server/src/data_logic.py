@@ -115,10 +115,12 @@ def get_golden_rule_facts(hash_bucket_num: int,
 
         except Exception as e:
             logger.exception(msg=f"get_golden_rule_facts - Exception: {str(e)}")
+            raise
         else:
             logger.debug(msg=f"get_golden_rule_facts - Succeeded")
             return golden_rule_facts.to_pyarrow()
         finally:
+            logger.debug(msg=f"get_golden_rule_facts - Finally")
             if not existing_logger:
                 logger.handlers.clear()
 
