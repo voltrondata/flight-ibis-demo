@@ -3,6 +3,7 @@ import pyarrow.flight
 from datetime import datetime
 import json
 import click
+import logging
 from .config import get_logger
 
 
@@ -21,7 +22,8 @@ LOCALHOST: str = "0.0.0.0"
     "--port",
     type=int,
     default=8815,
-    help="Port number of the Flight server to connect to")
+    help="Port number of the Flight server to connect to"
+)
 @click.option(
     "--tls/--no-tls",
     type=bool,
@@ -42,17 +44,31 @@ LOCALHOST: str = "0.0.0.0"
     nargs=2,
     default=None,
     metavar=('CERTFILE', 'KEYFILE'),
-    help="Enable transport-level security")
+    help="Enable transport-level security"
+)
 @click.option(
     "--verify_client",
     type=bool,
     default=False,
-    help="enable mutual TLS and verify the client if True")
+    help="enable mutual TLS and verify the client if True"
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["INFO", "DEBUG", "WARNING", "CRITICAL"], case_sensitive=False),
+    default="INFO",
+    help="The logging level to use"
+)
 @click.option(
     "--log-file",
     type=str,
     default=None,
     help="The log file to write to.  If None, will just log to stdout"
+)
+@click.option(
+    "--log-file-mode",
+    type=click.Choice(["a", "w"], case_sensitive=True),
+    default="w",
+    help="The log file mode, use value: a for 'append', and value: w to overwrite..."
 )
 def run_flight_client(host: str,
                       port: int,
@@ -60,11 +76,14 @@ def run_flight_client(host: str,
                       tls_roots: str,
                       mtls: list,
                       verify_client: bool,
-                      log_file: str
+                      log_level: str,
+                      log_file: str,
+                      log_file_mode: str
                       ):
     logger = get_logger(filename=log_file,
-                        filemode="w",
-                        logger_name="flight_client"
+                        filemode=log_file_mode,
+                        logger_name="flight_client",
+                        log_level=getattr(logging, log_level.upper())
                         )
 
     logger.info(msg=f"run_flight_client - was called with args: {locals()}")

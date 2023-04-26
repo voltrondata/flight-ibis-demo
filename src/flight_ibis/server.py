@@ -34,11 +34,14 @@ class FlightServer(pa.flight.FlightServerBase):
                  verify_client=False,
                  root_certificates=None,
                  auth_handler=None,
-                 log_file: str = None
+                 log_level: str = None,
+                 log_file: str = None,
+                 log_file_mode: str = None
                  ):
         self.logger = get_logger(filename=log_file,
-                                 filemode="w",
-                                 logger_name="flight_server"
+                                 filemode=log_file_mode,
+                                 logger_name="flight_server",
+                                 log_level=getattr(logging, log_level.upper())
                                  )
 
         self.logger.info(msg=f"Flight Server init args: {locals()}")
@@ -159,7 +162,8 @@ class FlightServer(pa.flight.FlightServerBase):
     "--port",
     type=int,
     default=8815,
-    help="Port number to listen on")
+    help="Port number to listen on"
+)
 @click.option(
     "--database-file",
     type=str,
@@ -183,17 +187,31 @@ class FlightServer(pa.flight.FlightServerBase):
     nargs=2,
     default=None,
     metavar=('CERTFILE', 'KEYFILE'),
-    help="Enable transport-level security")
+    help="Enable transport-level security"
+)
 @click.option(
     "--verify_client",
     type=bool,
     default=False,
-    help="enable mutual TLS and verify the client if True")
+    help="enable mutual TLS and verify the client if True"
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["INFO", "DEBUG", "WARNING", "CRITICAL"], case_sensitive=False),
+    default="INFO",
+    help="The logging level to use"
+)
 @click.option(
     "--log-file",
     type=str,
     default=None,
     help="The log file to write to.  If None, will just log to stdout"
+)
+@click.option(
+    "--log-file-mode",
+    type=click.Choice(["a", "w"], case_sensitive=True),
+    default="w",
+    help="The log file mode, use value: a for 'append', and value: w to overwrite..."
 )
 def run_flight_server(host: str,
                       port: int,
@@ -202,7 +220,9 @@ def run_flight_server(host: str,
                       duckdb_memory_limit: str,
                       tls: list,
                       verify_client: bool,
-                      log_file: str
+                      log_level: str,
+                      log_file: str,
+                      log_file_mode: str
                       ):
     tls_certificates = []
     scheme = "grpc+tcp"
@@ -221,7 +241,9 @@ def run_flight_server(host: str,
                           duckdb_memory_limit=duckdb_memory_limit,
                           tls_certificates=tls_certificates,
                           verify_client=verify_client,
-                          log_file=log_file
+                          log_level=log_level,
+                          log_file=log_file,
+                          log_file_mode=log_file_mode
                           )
     try:
         server.serve()
