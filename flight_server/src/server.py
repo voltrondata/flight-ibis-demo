@@ -14,7 +14,6 @@ LOCALHOST: str = "0.0.0.0"
 MAX_THREADS: int = 11
 BEGINNING_OF_TIME: datetime = datetime(year=1775, month=11, day=10)
 END_OF_TIME: datetime = datetime(year=9999, month=12, day=25)   # Merry last Christmas!
-LOGGER_FLUSH = dict(flush=True)
 
 
 class FlightServer(pa.flight.FlightServerBase):
