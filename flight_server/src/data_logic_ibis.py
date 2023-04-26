@@ -1,6 +1,6 @@
 import ibis
 from ibis import _
-from config import DUCKDB_DB_FILE, get_logger
+from config import DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, get_logger
 from datetime import datetime
 import pyarrow
 
@@ -14,7 +14,8 @@ DUCKDB_THREADS: int = 4
 DUCKDB_MEMORY_LIMIT: str = "4GB"
 
 
-def get_golden_rule_facts(hash_bucket_num: int,
+def get_golden_rule_facts(conn: ibis.BaseBackend,
+                          hash_bucket_num: int,
                           total_hash_buckets: int,
                           min_date: datetime,
                           max_date: datetime,
@@ -31,14 +32,6 @@ def get_golden_rule_facts(hash_bucket_num: int,
                                 )
 
         logger.debug(f"get_golden_rule_facts - was called with args: {locals()}")
-
-        conn = ibis.duckdb.connect(database=DUCKDB_DB_FILE,
-                                   threads=DUCKDB_THREADS,
-                                   memory_limit=DUCKDB_MEMORY_LIMIT,
-                                   read_only=True
-                                   )
-
-        logger.debug(f"get_golden_rule_facts - successfully got ibis DuckDB connection.")
 
         orders = conn.table("orders")
         lineitem = conn.table("lineitem")
@@ -131,9 +124,16 @@ def get_golden_rule_facts(hash_bucket_num: int,
 if __name__ == '__main__':
     logger = get_logger()
     TOTAL_HASH_BUCKETS: int = 11
+
+    conn = ibis.duckdb.connect(database=DUCKDB_DB_FILE,
+                               threads=DUCKDB_THREADS,
+                               memory_limit=DUCKDB_MEMORY_LIMIT,
+                               read_only=True
+                               )
     for i in range(1, TOTAL_HASH_BUCKETS + 1):
         logger.info(msg=f"Bucket #: {i}")
-        x = get_golden_rule_facts(hash_bucket_num=i,
+        x = get_golden_rule_facts(conn=conn,
+                                  hash_bucket_num=i,
                                   total_hash_buckets=TOTAL_HASH_BUCKETS,
                                   min_date=datetime(year=1994, month=1, day=1),
                                   max_date=datetime(year=1997, month=12, day=31),

@@ -8,8 +8,6 @@ SCRIPT_DIR = Path(__file__).parent.resolve()
 LOG_DIR = SCRIPT_DIR / "logs"
 DATA_DIR = SCRIPT_DIR / "data"
 DUCKDB_DB_FILE = DATA_DIR / "tpch.duckdb"
-DUCKDB_THREADS = 4
-DUCKDB_MEMORY_LIMIT = "4GB"
 
 # Logging Constants
 LOGGING_FORMAT = '%(asctime)s - %(levelname)-8s %(message)s'
