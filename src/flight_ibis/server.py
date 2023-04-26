@@ -102,7 +102,7 @@ class FlightServer(pa.flight.FlightServerBase):
         except Exception as e:
             error_message = f"{self.class_name}._make_flight_info - Error: {str(e)}"
             self.logger.error(msg=error_message)
-            return pa.flight.FlightError(message=error_message)
+            pass   # Do not raise the error, as it would terminate the server...
         else:
             return pyarrow.flight.FlightInfo(schema=schema,
                                              descriptor=descriptor,
@@ -148,7 +148,7 @@ class FlightServer(pa.flight.FlightServerBase):
         else:
             error_message = f"{self.class_name}.do_get - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
-            return pa.flight.FlightError(message=error_message)
+            pass  # Do not raise the error, as it would terminate the server...
 
 
 @click.command()
