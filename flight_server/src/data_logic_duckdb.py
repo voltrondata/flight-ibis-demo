@@ -4,8 +4,6 @@ from config import DUCKDB_DB_FILE, get_logger
 from datetime import datetime
 
 # Constants
-INNER_JOIN = "inner"
-SEMI_JOIN = "semi"
 MAX_ORDER_TOTALPRICE = 500_000.00
 MAX_PERCENT_RANK = 0.98
 DUCKDB_THREADS: int = 4
