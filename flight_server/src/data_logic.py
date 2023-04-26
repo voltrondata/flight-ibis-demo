@@ -115,12 +115,11 @@ def get_golden_rule_facts(hash_bucket_num: int,
         logger.exception(msg=f"get_golden_rule_facts - Exception: {str(e)}")
         raise
     else:
-        logger.debug(msg=f"get_golden_rule_facts - Succeeded")
         logger.debug(f"get_golden_rule_facts - trying to convert to PyArrow.")
-        return_dataset = golden_rule_facts.to_pyarrow()
+        pyarrow_dataset = golden_rule_facts.to_pyarrow()
         logger.debug(f"get_golden_rule_facts - successfully converted to PyArrow.")
 
-        return return_dataset
+        return pyarrow_dataset
     finally:
         logger.debug(msg=f"get_golden_rule_facts - Finally")
         if not existing_logger:
