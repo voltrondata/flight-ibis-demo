@@ -32,6 +32,7 @@ pip install --requirement requirements.txt
 ```shell
 . ./venv/bin/activate
 python ./flight_server/src/create_local_duckdb_database.py
+
 ```
 
 ## Run the example
@@ -39,10 +40,12 @@ python ./flight_server/src/create_local_duckdb_database.py
 ```shell
 . ./venv/bin/activate
 python ./flight_server/src/server.py
+
 ```
 
 ### 2. Open another terminal (leave the server running) - and run the Flight Client
 ```shell
 . ./venv/bin/activate
 python ./flight_client/src/client.py
+
 ```
