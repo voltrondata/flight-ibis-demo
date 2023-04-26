@@ -158,6 +158,8 @@ def main(host: str,
                           )
     try:
         server.serve()
+    except Exception as e:
+        server.logger.exception(msg=f"Flight server had exception: {str(e)}")
     finally:
         server.logger.info(msg="Flight server shutdown")
         logging.shutdown()
