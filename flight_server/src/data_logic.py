@@ -111,17 +111,17 @@ def get_golden_rule_facts(hash_bucket_num: int,
 
         logger.debug(f"get_golden_rule_facts - successfully built Ibis expression.")
 
+        pyarrow_dataset = golden_rule_facts.to_pyarrow()
+
+        logger.debug(f"get_golden_rule_facts - successfully converted Ibis expression to PyArrow.")
+
     except Exception as e:
         logger.exception(msg=f"get_golden_rule_facts - Exception: {str(e)}")
         raise
     else:
-        logger.debug(f"get_golden_rule_facts - trying to convert to PyArrow.")
-        pyarrow_dataset = golden_rule_facts.to_pyarrow()
-        logger.debug(f"get_golden_rule_facts - successfully converted to PyArrow.")
-
         return pyarrow_dataset
     finally:
-        logger.debug(msg=f"get_golden_rule_facts - Finally")
+        logger.debug(msg=f"get_golden_rule_facts - Finally block")
         if not existing_logger:
             logger.handlers.clear()
 
