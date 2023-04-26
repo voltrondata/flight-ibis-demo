@@ -2,20 +2,22 @@ import click
 import pyarrow as pa
 import pyarrow.flight
 import pyarrow.parquet
-from config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
-from data_logic_ibis import get_golden_rule_facts
 import json
 from munch import Munch, munchify
 from datetime import datetime
 from pathlib import Path
 import ibis
-
+import duckdb
+from . import __version__ as flight_server_version
+from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
+from .data_logic_ibis import get_golden_rule_facts
 
 # Constants
 LOCALHOST: str = "0.0.0.0"
 MAX_THREADS: int = 11
 BEGINNING_OF_TIME: datetime = datetime(year=1775, month=11, day=10)
 END_OF_TIME: datetime = datetime(year=9999, month=12, day=25)  # Merry last Christmas!
+PYARROW_UNKNOWN: int = -1
 
 
 class FlightServer(pa.flight.FlightServerBase):
@@ -24,15 +26,15 @@ class FlightServer(pa.flight.FlightServerBase):
         return self.__class__.__name__
 
     def __init__(self,
-                 location,
-                 database_file,
-                 duckdb_threads,
-                 duckdb_memory_limit,
+                 location: str,
+                 database_file: Path,
+                 duckdb_threads: int,
+                 duckdb_memory_limit: str,
                  tls_certificates=None,
                  verify_client=False,
                  root_certificates=None,
                  auth_handler=None,
-                 log_file=None
+                 log_file: str = None
                  ):
         self.logger = get_logger(filename=log_file,
                                  filemode="w",
@@ -40,6 +42,9 @@ class FlightServer(pa.flight.FlightServerBase):
                                  )
 
         self.logger.info(msg=f"Flight Server init args: {locals()}")
+
+        if not database_file.exists():
+            raise RuntimeError(f"The specified database file: '{database_file.as_posix()}' does not exist, aborting.")
 
         super(FlightServer, self).__init__(
             location=location,
@@ -59,6 +64,10 @@ class FlightServer(pa.flight.FlightServerBase):
                                                    read_only=True
                                                    )
 
+        self.logger.info(f"Running Flight-Ibis server - version: {flight_server_version}")
+        self.logger.info(f"Using PyArrow version: {pyarrow.__version__}")
+        self.logger.info(f"Using Ibis version: {ibis.__version__}")
+        self.logger.info(f"Using DuckDB version: {duckdb.__version__}")
         self.logger.info(f"Serving on {self._location}")
 
     def _make_flight_info(self, command):
@@ -84,23 +93,32 @@ class FlightServer(pa.flight.FlightServerBase):
                                            total_hash_buckets=1,
                                            min_date=BEGINNING_OF_TIME,
                                            max_date=BEGINNING_OF_TIME,
-                                           schema_only=True
+                                           schema_only=True,
+                                           existing_logger=self.logger
                                            ).schema
         except Exception as e:
-            self.logger.error(msg=f"{self.class_name}._make_flight_info - Error: {str(e)}")
+            error_message = f"{self.class_name}._make_flight_info - Error: {str(e)}"
+            self.logger.error(msg=error_message)
+            return pa.flight.FlightError(message=error_message)
         else:
-            return pyarrow.flight.FlightInfo(schema,
-                                             descriptor,
-                                             endpoints,
-                                             -1,
-                                             -1)
+            return pyarrow.flight.FlightInfo(schema=schema,
+                                             descriptor=descriptor,
+                                             endpoints=endpoints,
+                                             total_records=PYARROW_UNKNOWN,
+                                             total_bytes=-PYARROW_UNKNOWN
+                                             )
 
     def get_flight_info(self, context, descriptor):
-        self.logger.debug(msg=f"{self.class_name}.get_flight_info - context={context}, descriptor={descriptor}")
-        return self._make_flight_info(descriptor.command.decode('utf-8'))
+        self.logger.info(msg=f"{self.class_name}.get_flight_info - called with context = {context}, descriptor = {descriptor}")
+        flight_info = self._make_flight_info(descriptor.command.decode('utf-8'))
+        self.logger.info(msg=(f"{self.class_name}.get_flight_info - with context = {context}, descriptor = {descriptor}"
+                              f"- returning: FlightInfo ({dict(schema=flight_info.schema, endpoints=flight_info.endpoints)})"
+                              )
+                         )
+        return flight_info
 
     def do_get(self, context, ticket):
-        self.logger.debug(msg=f"{self.class_name}.do_get - context = {context}, ticket = {ticket}")
+        self.logger.info(msg=f"{self.class_name}.do_get - context = {context}, ticket = {ticket}")
         command_munch: Munch = munchify(x=json.loads(ticket.ticket.decode('utf-8')))
 
         command_kwargs = command_munch.kwargs
@@ -112,18 +130,20 @@ class FlightServer(pa.flight.FlightServerBase):
                                           total_hash_buckets=command_kwargs.total_hash_buckets,
                                           min_date=datetime.fromisoformat(command_kwargs.min_date),
                                           max_date=datetime.fromisoformat(command_kwargs.max_date),
-                                          schema_only=False
+                                          schema_only=False,
+                                          existing_logger=self.logger
                                           )
-                self.logger.debug(msg=f"{self.class_name}.get_flight_info - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
+                self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
                 dataset = get_golden_rule_facts(**golden_rule_kwargs)
             except Exception as e:
-                self.logger.exception(msg=f"{self.class_name}.get_flight_info - Exception: {str(e)}")
-                pass  # Do not re-raise the exception b/c it would terminate the server...
+                error_message = f"{self.class_name}.get_flight_info - Exception: {str(e)}"
+                self.logger.exception(msg=error_message)
+                return pa.flight.FlightError(message=error_message)
             else:
-                self.logger.debug(msg=f"{self.class_name}.get_flight_info - dataset rows: {dataset.num_rows}")
+                self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a dataset with row count: {dataset.num_rows}")
                 return pa.flight.RecordBatchStream(dataset)
         else:
-            error_message = f"{self.class_name}.get_flight_info - Command: {command_munch.command} is not supported."
+            error_message = f"{self.class_name}.do_get - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
             return pa.flight.FlightError(message=error_message)
 
@@ -207,6 +227,7 @@ def run_flight_server(host: str,
         server.serve()
     except Exception as e:
         server.logger.exception(msg=f"Flight server had exception: {str(e)}")
+        raise
     finally:
         server.logger.info(msg="Flight server shutdown")
         logging.shutdown()

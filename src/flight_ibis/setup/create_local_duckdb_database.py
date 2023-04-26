@@ -1,6 +1,6 @@
 import click
 import duckdb
-from config import DUCKDB_DB_FILE, get_logger
+from ..config import DUCKDB_DB_FILE, get_logger
 from pathlib import Path
 
 

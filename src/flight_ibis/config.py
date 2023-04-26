@@ -5,8 +5,8 @@ from pathlib import Path
 
 # Constants
 SCRIPT_DIR = Path(__file__).parent.resolve()
-LOG_DIR = SCRIPT_DIR / "logs"
-DATA_DIR = SCRIPT_DIR / "data"
+LOG_DIR = Path("logs").resolve()
+DATA_DIR = Path("data").resolve()
 DUCKDB_DB_FILE = DATA_DIR / "tpch.duckdb"
 DUCKDB_THREADS = 4
 DUCKDB_MEMORY_LIMIT = "4GB"
@@ -14,7 +14,7 @@ DUCKDB_MEMORY_LIMIT = "4GB"
 # Logging Constants
 LOGGING_FORMAT = '%(asctime)s - %(levelname)-8s %(message)s'
 LOGGING_DATEFMT = '%Y-%m-%d %H:%M:%S %Z'
-LOGGING_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "DEBUG"))
+LOGGING_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO"))
 BASIC_LOGGING_KWARGS = dict(format=LOGGING_FORMAT,
                             datefmt=LOGGING_DATEFMT,
                             level=LOGGING_LEVEL

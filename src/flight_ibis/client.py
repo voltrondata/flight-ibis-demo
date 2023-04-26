@@ -3,7 +3,7 @@ import pyarrow.flight
 from datetime import datetime
 import json
 import click
-from config import get_logger
+from .config import get_logger
 
 
 # Constants

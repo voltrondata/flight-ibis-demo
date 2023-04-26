@@ -1,0 +1,62 @@
+[build-system]
+requires      = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["./src"]  # list of folders that contain the packages (["."] by default)
+include = ["*"]  # package names should match these glob patterns (["*"] by default)
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml"]
+
+[project]
+name = "flight-ibis"
+version = "0.0.1"
+description = "An Apache Arrow Flight server/client example powered by Ibis and DuckDB"
+readme = "README.md"
+authors = [{ name = "Philip Moore", email = "prmoore77@hotmail.com" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["flight-ibis", "flight", "ibis"]
+dependencies = [
+    "pyarrow==11.0.*",
+    "click==8.1.*",
+    "duckdb==0.7.*",
+    "ibis-framework[duckdb]==5.1.*",
+    "munch==2.5.*"
+]
+requires-python = ">=3.8"
+
+[project.optional-dependencies]
+dev = ["bumpver", "pip-tools", "pytest"]
+
+[project.urls]
+Homepage = "https://github.com/voltrondata/k8s-flight-demo"
+
+[project.scripts]
+flight-server = "flight_ibis.server:run_flight_server"
+flight-client = "flight_ibis.client:run_flight_client"
+flight-data-bootstrap = "flight_ibis.setup.create_local_duckdb_database:create_local_duckdb_database"
+
+[tool.bumpver]
+current_version = "0.0.1"
+version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
+commit_message = "bump version {old_version} -> {new_version}"
+commit = true
+tag = true
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    '^version = "{version}"$',
+    '^current_version = "{version}"$',
+]
+"src/flight_ibis/__init__.py" = [
+    '^__version__ = "{version}"$',
+]

@@ -1,8 +1,8 @@
 import ibis
 from ibis import _
-from config import DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, get_logger
 from datetime import datetime
 import pyarrow
+from .config import DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, get_logger
 
 
 # Constants
@@ -20,13 +20,14 @@ def get_golden_rule_facts(conn: ibis.BaseBackend,
                           min_date: datetime,
                           max_date: datetime,
                           schema_only: bool = False,
-                          existing_logger = None
+                          existing_logger=None,
+                          log_file: str = None
                           ) -> pyarrow.Table:
     try:
         if existing_logger:
             logger = existing_logger
         else:
-            logger = get_logger(filename=f"data_logic_{hash_bucket_num}.log",
+            logger = get_logger(filename=log_file,
                                 filemode="w",
                                 logger_name="data_logic"
                                 )
