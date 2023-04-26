@@ -10,7 +10,7 @@ git clone https://github.com/voltrondata/k8s-flight-demo
 ```
 
 ### 2. Setup Python
-Create a new Python 3.8+ virtual environment and install sidewinder-db with:
+Create a new Python 3.8+ virtual environment and install the Flight server/client demo with:
 ```shell
 cd k8s-flight-demo
 
