@@ -32,8 +32,8 @@ def get_golden_rule_facts(hash_bucket_num: int,
         logger.debug(f"get_golden_rule_facts - was called with args: {locals()}")
 
         conn = ibis.duckdb.connect(database=DUCKDB_DB_FILE,
-                                   # threads=DUCKDB_THREADS,
-                                   # memory_limit=DUCKDB_MEMORY_LIMIT,
+                                   threads=DUCKDB_THREADS,
+                                   memory_limit=DUCKDB_MEMORY_LIMIT,
                                    read_only=True
                                    )
 
