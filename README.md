@@ -25,20 +25,24 @@ pip install --upgrade pip
 
 # Install requirements
 pip install --requirement requirements.txt
+
 ```
 
 ### 3. Create a sample TPC-H database
 ```shell
-python ./flight_server/create_local_duckdb_database.py
+. ./venv/bin/activate
+python ./flight_server/src/create_local_duckdb_database.py
 ```
 
 ## Run the example
 ### 1. Run the Flight Server
 ```shell
-python ./flight_server/server.py
+. ./venv/bin/activate
+python ./flight_server/src/server.py
 ```
 
 ### 2. Open another terminal (leave the server running) - and run the Flight Client
 ```shell
-python ./flight_client/client.py
+. ./venv/bin/activate
+python ./flight_client/src/client.py
 ```
