@@ -76,7 +76,9 @@ flight-server --tls=tls/server.crt tls/server.key
 ##### 3. Open another terminal (leave the server running) - and run the Flight Client with TLS enabled (trusting your cert created in step #1)
 ```shell
 . ./venv/bin/activate
-flight-client --host=localhost --tls --tls-roots=tls/server.crt
+flight-client --host=localhost \
+              --tls \
+              --tls-roots=tls/server.crt
 
 ```
 
@@ -107,7 +109,9 @@ flight-create-mtls-client-keypair
 ##### 4. Run the Flight Server with TLS and MTLS enabled (using the certificates created in the steps above)
 ```shell
 . ./venv/bin/activate
-flight-server --tls=tls/server.crt tls/server.key --verify-client --mtls=tls/ca.crt
+flight-server --tls=tls/server.crt tls/server.key \
+              --verify-client \
+              --mtls=tls/ca.crt
 
 ```
 
