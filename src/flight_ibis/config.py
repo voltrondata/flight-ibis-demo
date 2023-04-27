@@ -28,7 +28,7 @@ def get_logger(filename: str = None,
                log_level: int = LOGGING_LEVEL
                ):
     logger = logging.getLogger(name=logger_name)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(log_level)
 
     # Create a formatter for the log messages
     formatter = logging.Formatter(fmt=LOGGING_FORMAT)
