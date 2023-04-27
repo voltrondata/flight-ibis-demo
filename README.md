@@ -37,7 +37,7 @@ flight-data-bootstrap
 
 ```
 ## Running the Flight Ibis Server and Client
-We've provided 3 examples of how to run the Flight Ibis Server and Client - starting from the least to the most secure.
+We've provided 4 examples of how to run the Flight Ibis Server and Client - starting from the least to the most secure.
 
 ### Option 1) Running the Flight Ibis Server / Client demo without TLS (NOT secure)
 
