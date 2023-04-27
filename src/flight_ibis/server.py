@@ -202,10 +202,18 @@ class FlightServer(pa.flight.FlightServerBase):
     help="Enable transport-level security"
 )
 @click.option(
-    "--verify_client",
+    "--verify-client/--no-verify-client",
     type=bool,
     default=False,
+    show_default=True,
+    required=True,
     help="enable mutual TLS and verify the client if True"
+)
+@click.option(
+    "--mtls",
+    type=str,
+    default=None,
+    help="If you provide verify-client, you must supply an MTLS CA Certificate file (public key only)"
 )
 @click.option(
     "--log-level",
@@ -233,6 +241,7 @@ def run_flight_server(host: str,
                       duckdb_memory_limit: str,
                       tls: list,
                       verify_client: bool,
+                      mtls: str,
                       log_level: str,
                       log_file: str,
                       log_file_mode: str
@@ -247,6 +256,14 @@ def run_flight_server(host: str,
             tls_private_key = key_file.read()
         tls_certificates.append((tls_cert_chain, tls_private_key))
 
+    root_certificates = None
+    if verify_client:
+        if not mtls:
+            raise RuntimeError("You MUST provide a CA certificate public key file path if 'verify_client' is True, aborting.")
+        else:
+            with open(mtls, "rb") as mtls_ca_file:
+                root_certificates = mtls_ca_file.read()
+
     host_uri = f"{scheme}://{host}:{port}"
     location_uri = f"{scheme}://{location}:{port}"
     server = FlightServer(host_uri=host_uri,
@@ -256,6 +273,7 @@ def run_flight_server(host: str,
                           duckdb_memory_limit=duckdb_memory_limit,
                           tls_certificates=tls_certificates,
                           verify_client=verify_client,
+                          root_certificates=root_certificates,
                           log_level=log_level,
                           log_file=log_file,
                           log_file_mode=log_file_mode

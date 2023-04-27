@@ -46,7 +46,9 @@ Homepage = "https://github.com/voltrondata/k8s-flight-demo"
 flight-server = "flight_ibis.server:run_flight_server"
 flight-client = "flight_ibis.client:run_flight_client"
 flight-data-bootstrap = "flight_ibis.setup.create_local_duckdb_database:create_local_duckdb_database"
-flight-create-tls-keypair = "flight_ibis.setup.generate_localhost_tls_keypair:main"
+flight-create-tls-keypair = "flight_ibis.setup.tls_utilities:create_tls_keypair"
+flight-create-mtls-ca-keypair = "flight_ibis.setup.mtls_utilities:create_ca_keypair"
+flight-create-mtls-client-keypair = "flight_ibis.setup.mtls_utilities:create_client_keypair"
 
 [tool.bumpver]
 current_version = "0.0.1"

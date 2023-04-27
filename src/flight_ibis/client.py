@@ -47,12 +47,6 @@ LOCALHOST: str = "0.0.0.0"
     help="Enable transport-level security"
 )
 @click.option(
-    "--verify_client",
-    type=bool,
-    default=False,
-    help="enable mutual TLS and verify the client if True"
-)
-@click.option(
     "--log-level",
     type=click.Choice(["INFO", "DEBUG", "WARNING", "CRITICAL"], case_sensitive=False),
     default="INFO",
@@ -75,7 +69,6 @@ def run_flight_client(host: str,
                       tls: bool,
                       tls_roots: str,
                       mtls: list,
-                      verify_client: bool,
                       log_level: str,
                       log_file: str,
                       log_file_mode: str
