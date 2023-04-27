@@ -17,7 +17,7 @@
 
 """An example Flight Python server."""
 
-import click
+import argparse
 import ast
 import threading
 import time
@@ -37,23 +37,19 @@ class FlightServer(pyarrow.flight.FlightServerBase):
         self.host = host
         self.tls_certificates = tls_certificates
 
-    @property
-    def endpoint_location(self):
-        if self.tls_certificates:
-            return pyarrow.flight.Location.for_grpc_tls(
-                self.host, self.port)
-        else:
-            return pyarrow.flight.Location.for_grpc_tcp(
-                self.host, self.port)
-
     @classmethod
     def descriptor_to_key(self, descriptor):
         return (descriptor.descriptor_type.value, descriptor.command,
                 tuple(descriptor.path or tuple()))
 
     def _make_flight_info(self, key, descriptor, table):
-
-        endpoints = [pyarrow.flight.FlightEndpoint(repr(key), [self.endpoint_location]), ]
+        if self.tls_certificates:
+            location = pyarrow.flight.Location.for_grpc_tls(
+                self.host, self.port)
+        else:
+            location = pyarrow.flight.Location.for_grpc_tcp(
+                self.host, self.port)
+        endpoints = [pyarrow.flight.FlightEndpoint(repr(key), [location]), ]
 
         mock_sink = pyarrow.MockOutputStream()
         stream_writer = pyarrow.RecordBatchStreamWriter(
@@ -104,7 +100,7 @@ class FlightServer(pyarrow.flight.FlightServerBase):
     def do_action(self, context, action):
         if action.type == "clear":
             raise NotImplementedError(
-                f"{action.type} is not implemented.")
+                "{} is not implemented.".format(action.type))
         elif action.type == "healthcheck":
             pass
         elif action.type == "shutdown":
@@ -113,7 +109,7 @@ class FlightServer(pyarrow.flight.FlightServerBase):
             # request
             threading.Thread(target=self._shutdown).start()
         else:
-            raise KeyError(f"Unknown action {action.type}")
+            raise KeyError("Unknown action {!r}".format(action.type))
 
     def _shutdown(self):
         """Shut down after a delay."""
@@ -122,51 +118,35 @@ class FlightServer(pyarrow.flight.FlightServerBase):
         self.shutdown()
 
 
-@click.command()
-@click.option(
-    "--host",
-    type=str,
-    default="localhost",
-    help="Address or hostname to listen on"
-)
-@click.option(
-    "--port",
-    type=int,
-    default=5005,
-    help="Port number to listen on")
-@click.option(
-    "--tls",
-    nargs=2,
-    default=None,
-    metavar=('CERTFILE', 'KEYFILE'),
-    help="Enable transport-level security")
-@click.option(
-    "--verify_client",
-    type=bool,
-    default=False,
-    help="enable mutual TLS and verify the client if True")
-def main(host: str,
-         port: int,
-         tls: list,
-         verify_client: bool
-         ):
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", type=str, default="localhost",
+                        help="Address or hostname to listen on")
+    parser.add_argument("--port", type=int, default=5005,
+                        help="Port number to listen on")
+    parser.add_argument("--tls", nargs=2, default=None,
+                        metavar=('CERTFILE', 'KEYFILE'),
+                        help="Enable transport-level security")
+    parser.add_argument("--verify_client", type=bool, default=False,
+                        help="enable mutual TLS and verify the client if True")
+
+    args = parser.parse_args()
     tls_certificates = []
     scheme = "grpc+tcp"
-    if tls:
+    if args.tls:
         scheme = "grpc+tls"
-        with open(tls[0], "rb") as cert_file:
+        with open(args.tls[0], "rb") as cert_file:
             tls_cert_chain = cert_file.read()
-        with open(tls[1], "rb") as key_file:
+        with open(args.tls[1], "rb") as key_file:
             tls_private_key = key_file.read()
         tls_certificates.append((tls_cert_chain, tls_private_key))
 
-    location = f"{scheme}://{host}:{port}"
+    location = "{}://{}:{}".format(scheme, args.host, args.port)
 
-    server = FlightServer(host=host,
-                          location=location,
+    server = FlightServer(args.host, location,
                           tls_certificates=tls_certificates,
-                          verify_client=verify_client)
-    print(f"Serving on {location}")
+                          verify_client=args.verify_client)
+    print("Serving on", location)
     server.serve()
 
 

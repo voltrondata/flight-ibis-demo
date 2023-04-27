@@ -1,4 +1,4 @@
-# Kubernetes Flight Server demo
+# Arrow Flight Ibis Server demo
 
 # Setup (to run locally)
 
@@ -37,17 +37,43 @@ flight-data-bootstrap
 
 ```
 
-## Run the example
-### 1. Run the Flight Server
+## Running the Flight Ibis Server / Client demo without TLS (NOT secure)
+
+### Run the example
+#### 1. Run the Flight Server
 ```shell
 . ./venv/bin/activate
 flight-server
 
 ```
 
-### 2. Open another terminal (leave the server running) - and run the Flight Client
+#### 2. Open another terminal (leave the server running) - and run the Flight Client
 ```shell
 . ./venv/bin/activate
 flight-client
+
+```
+
+## Running the Flight Ibis Server / Client demo with TLS (secure)
+
+### Run the example
+#### 1. Generate a localhost TLS certificate keypair
+```shell
+. ./venv/bin/activate
+flight-create-tls-keypair
+
+```
+
+#### 2. Run the Flight Server with TLS enabled (using the keypair created in step #1 above)
+```shell
+. ./venv/bin/activate
+flight-server --tls=tls/cert.pem tls/key.pem
+
+```
+
+#### 3. Open another terminal (leave the server running) - and run the Flight Client with TLS enabled (trusting your cert created in step #1)
+```shell
+. ./venv/bin/activate
+flight-client --host=localhost --tls --tls-roots=tls/cert.pem
 
 ```

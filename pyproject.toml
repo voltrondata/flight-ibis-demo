@@ -30,7 +30,9 @@ dependencies = [
     "click==8.1.*",
     "duckdb==0.7.*",
     "ibis-framework[duckdb]==5.1.*",
-    "munch==2.5.*"
+    "munch==2.5.*",
+    "pyOpenSSL==23.1.*",
+    "cryptography==40.0.*"
 ]
 requires-python = ">=3.8"
 
@@ -44,6 +46,7 @@ Homepage = "https://github.com/voltrondata/k8s-flight-demo"
 flight-server = "flight_ibis.server:run_flight_server"
 flight-client = "flight_ibis.client:run_flight_client"
 flight-data-bootstrap = "flight_ibis.setup.create_local_duckdb_database:create_local_duckdb_database"
+flight-create-tls-keypair = "flight_ibis.setup.generate_localhost_tls_keypair:main"
 
 [tool.bumpver]
 current_version = "0.0.1"

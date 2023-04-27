@@ -13,7 +13,8 @@ from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_
 from .data_logic_ibis import get_golden_rule_facts
 
 # Constants
-LOCALHOST: str = "0.0.0.0"
+LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
+LOCALHOST: str = "localhost"
 MAX_THREADS: int = 11
 BEGINNING_OF_TIME: datetime = datetime(year=1775, month=11, day=10)
 END_OF_TIME: datetime = datetime(year=9999, month=12, day=25)  # Merry last Christmas!
@@ -26,7 +27,8 @@ class FlightServer(pa.flight.FlightServerBase):
         return self.__class__.__name__
 
     def __init__(self,
-                 location: str,
+                 host_uri: str,
+                 location_uri: str,
                  database_file: Path,
                  duckdb_threads: int,
                  duckdb_memory_limit: str,
@@ -44,13 +46,14 @@ class FlightServer(pa.flight.FlightServerBase):
                                  log_level=getattr(logging, log_level.upper())
                                  )
 
-        self.logger.info(msg=f"Flight Server init args: {locals()}")
+        redacted_locals = {key: value for key, value in locals().items() if key not in ["tls_certificates"]}
+        self.logger.info(msg=f"Flight Server init args: {redacted_locals}")
 
         if not database_file.exists():
             raise RuntimeError(f"The specified database file: '{database_file.as_posix()}' does not exist, aborting.")
 
         super(FlightServer, self).__init__(
-            location=location,
+            location=host_uri,
             auth_handler=auth_handler,
             tls_certificates=tls_certificates,
             verify_client=verify_client,
@@ -58,7 +61,8 @@ class FlightServer(pa.flight.FlightServerBase):
         )
         self.flights = {}
         self.tls_certificates = tls_certificates
-        self._location = location
+        self.host_uri = host_uri
+        self.location_uri = location_uri
 
         # Get an Ibis DuckDB connection
         self.ibis_connection = ibis.duckdb.connect(database=database_file,
@@ -71,7 +75,7 @@ class FlightServer(pa.flight.FlightServerBase):
         self.logger.info(f"Using PyArrow version: {pyarrow.__version__}")
         self.logger.info(f"Using Ibis version: {ibis.__version__}")
         self.logger.info(f"Using DuckDB version: {duckdb.__version__}")
-        self.logger.info(f"Serving on {self._location}")
+        self.logger.info(f"Serving on {self.host_uri} (generated end-points will refer to location: {self.location_uri})")
 
     def _make_flight_info(self, command):
         self.logger.debug(msg=f"{self.class_name}._make_flight_info - command: {command}")
@@ -88,7 +92,7 @@ class FlightServer(pa.flight.FlightServerBase):
         endpoints = []
         for i in range(1, (command_munch.kwargs.total_hash_buckets + 1)):
             command_munch.kwargs.hash_bucket_num = i
-            endpoints.append(pa.flight.FlightEndpoint(json.dumps(command_munch.toDict()), [self._location]))
+            endpoints.append(pa.flight.FlightEndpoint(json.dumps(command_munch.toDict()), [self.location_uri]))
 
         try:
             schema = get_golden_rule_facts(conn=self.ibis_connection,
@@ -155,8 +159,16 @@ class FlightServer(pa.flight.FlightServerBase):
 @click.option(
     "--host",
     type=str,
+    default=LOCALHOST_IP_ADDRESS,
+    help="Address (or hostname) to listen on"
+)
+@click.option(
+    "--location",
+    type=str,
     default=LOCALHOST,
-    help="Address or hostname to listen on"
+    help=("Address or hostname for TLS and endpoint generation.  This is needed if running the Flight server behind a load balancer and/or "
+          "a reverse proxy"
+          )
 )
 @click.option(
     "--port",
@@ -214,6 +226,7 @@ class FlightServer(pa.flight.FlightServerBase):
     help="The log file mode, use value: a for 'append', and value: w to overwrite..."
 )
 def run_flight_server(host: str,
+                      location: str,
                       port: int,
                       database_file: str,
                       duckdb_threads: int,
@@ -234,8 +247,10 @@ def run_flight_server(host: str,
             tls_private_key = key_file.read()
         tls_certificates.append((tls_cert_chain, tls_private_key))
 
-    location = f"{scheme}://{host}:{port}"
-    server = FlightServer(location=location,
+    host_uri = f"{scheme}://{host}:{port}"
+    location_uri = f"{scheme}://{location}:{port}"
+    server = FlightServer(host_uri=host_uri,
+                          location_uri=location_uri,
                           database_file=Path(database_file),
                           duckdb_threads=duckdb_threads,
                           duckdb_memory_limit=duckdb_memory_limit,
