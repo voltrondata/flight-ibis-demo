@@ -89,12 +89,16 @@ def run_flight_client(host: str,
             with open(tls_roots, "rb") as root_certs:
                 connection_args["tls_root_certs"] = root_certs.read()
     if mtls:
-        with open(mtls[0], "rb") as cert_file:
-            tls_cert_chain = cert_file.read()
-        with open(mtls[1], "rb") as key_file:
-            tls_private_key = key_file.read()
-        connection_args["cert_chain"] = tls_cert_chain
-        connection_args["private_key"] = tls_private_key
+        if not tls:
+            raise RuntimeError("TLS must be enabled in order to use MTLS, aborting.")
+        else:
+            with open(mtls[0], "rb") as cert_file:
+                tls_cert_chain = cert_file.read()
+            with open(mtls[1], "rb") as key_file:
+                tls_private_key = key_file.read()
+            connection_args["cert_chain"] = tls_cert_chain
+            connection_args["private_key"] = tls_private_key
+
     client = pyarrow.flight.FlightClient(f"{scheme}://{host}:{port}",
                                          **connection_args)
 
