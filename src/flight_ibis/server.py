@@ -264,8 +264,11 @@ def run_flight_server(host: str,
         if not mtls:
             raise RuntimeError("You MUST provide a CA certificate public key file path if 'verify_client' is True, aborting.")
         else:
-            with open(mtls, "rb") as mtls_ca_file:
-                root_certificates = mtls_ca_file.read()
+            if not tls:
+                raise RuntimeError("TLS must be enabled in order to use MTLS, aborting.")
+            else:
+                with open(mtls, "rb") as mtls_ca_file:
+                    root_certificates = mtls_ca_file.read()
 
     host_uri = f"{scheme}://{host}:{port}"
     location_uri = f"{scheme}://{location}:{port}"
