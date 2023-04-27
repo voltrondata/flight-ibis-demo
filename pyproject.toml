@@ -32,7 +32,8 @@ dependencies = [
     "ibis-framework[duckdb]==5.1.*",
     "munch==2.5.*",
     "pyOpenSSL==23.1.*",
-    "cryptography==40.0.*"
+    "cryptography==40.0.*",
+    "pyjwt==2.6.*"
 ]
 requires-python = ">=3.8"
 

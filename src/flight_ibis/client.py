@@ -4,11 +4,29 @@ from datetime import datetime
 import json
 import click
 import logging
+import os
 from .config import get_logger
-
 
 # Constants
 LOCALHOST: str = "0.0.0.0"
+
+
+class TokenClientAuthHandler(pyarrow.flight.ClientAuthHandler):
+    """An example implementation of authentication via handshake."""
+
+    def __init__(self, username, password):
+        super().__init__()
+        self.username = username
+        self.password = password
+        self.token = b''
+
+    def authenticate(self, outgoing, incoming):
+        outgoing.write(self.username)
+        outgoing.write(self.password)
+        self.token = incoming.read()
+
+    def get_token(self):
+        return self.token
 
 
 @click.command()
@@ -47,6 +65,22 @@ LOCALHOST: str = "0.0.0.0"
     help="Enable transport-level security"
 )
 @click.option(
+    "--flight-username",
+    type=str,
+    default=os.getenv("FLIGHT_USERNAME"),
+    required=False,
+    show_default=False,
+    help="The username used to connect to the Flight server"
+)
+@click.option(
+    "--flight-password",
+    type=str,
+    default=os.getenv("FLIGHT_PASSWORD"),
+    required=False,
+    show_default=False,
+    help="The password used to connect to the Flight server"
+)
+@click.option(
     "--log-level",
     type=click.Choice(["INFO", "DEBUG", "WARNING", "CRITICAL"], case_sensitive=False),
     default="INFO",
@@ -69,6 +103,8 @@ def run_flight_client(host: str,
                       tls: bool,
                       tls_roots: str,
                       mtls: list,
+                      flight_username: str,
+                      flight_password: str,
                       log_level: str,
                       log_file: str,
                       log_file_mode: str
@@ -101,6 +137,15 @@ def run_flight_client(host: str,
 
     client = pyarrow.flight.FlightClient(f"{scheme}://{host}:{port}",
                                          **connection_args)
+
+    if flight_username and flight_password:
+        if not tls:
+            raise RuntimeError("TLS must be enabled in order to use authentication, aborting.")
+
+        client.authenticate(TokenClientAuthHandler(username=flight_username,
+                                                   password=flight_password
+                                                   )
+                            )
 
     arg_dict = dict(num_threads=11,
                     min_date=datetime(year=1994, month=1, day=1).isoformat(),

@@ -8,6 +8,9 @@ from datetime import datetime
 from pathlib import Path
 import ibis
 import duckdb
+import jwt
+import os
+from OpenSSL import crypto
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
 from .data_logic_ibis import get_golden_rule_facts
@@ -19,6 +22,64 @@ MAX_THREADS: int = 11
 BEGINNING_OF_TIME: datetime = datetime(year=1775, month=11, day=10)
 END_OF_TIME: datetime = datetime(year=9999, month=12, day=25)  # Merry last Christmas!
 PYARROW_UNKNOWN: int = -1
+JWT_ISS = "Flight Ibis"
+
+
+class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
+    @property
+    def class_name(self):
+        return self.__class__.__name__
+
+    def __init__(self,
+                 creds: dict,
+                 cert: bytes,
+                 key: bytes,
+                 logger):
+        super().__init__()
+        self.creds = creds
+
+        # Extract the public key from the certificate
+        pub_key = crypto.load_certificate(type=crypto.FILETYPE_PEM, buffer=cert).get_pubkey()
+        self.public_key = crypto.dump_publickey(type=crypto.FILETYPE_PEM, pkey=pub_key)
+
+        self.private_key = key
+        self.logger = logger
+
+    def authenticate(self, outgoing, incoming):
+        username = incoming.read().decode()
+        password = incoming.read().decode()
+
+        if username in self.creds and self.creds[username] == password:
+            # Create a JWT and sign it with our private key
+            token = jwt.encode(payload=dict(username=username,
+                                            iss=JWT_ISS
+                                            ),
+                               key=self.private_key,
+                               algorithm="RS256"
+                               )
+            outgoing.write(token.encode())
+            self.logger.info(msg=f"{self.class_name}.authenticate - User: '{username}' successfully authenticated - issued JWT.")
+        else:
+            error_message = f"{self.class_name}.authenticate - invalid username/password"
+            self.logger.error(msg=error_message)
+            raise pa.flight.FlightUnauthenticatedError(error_message)
+
+    def is_valid(self, token):
+        # Decode the jwt, validating the signature with the public key
+        try:
+            decoded_jwt = jwt.decode(jwt=token.decode(),
+                                     key=self.public_key,
+                                     algorithms=["RS256"],
+                                     issuer=JWT_ISS
+                                     )
+        except Exception as e:
+            error_message = f"{self.class_name}.is_valid - jwt.decode failed with Exception: {str(e)}"
+            self.logger.exception(msg=error_message)
+            raise pa.flight.FlightError(error_message)
+        else:
+            username = decoded_jwt.get("username")
+            self.logger.debug(msg=f"{self.class_name}.is_valid - JWT with username: '{username}' was successfully verified")
+            return username.encode()
 
 
 class FlightServer(pa.flight.FlightServerBase):
@@ -32,6 +93,7 @@ class FlightServer(pa.flight.FlightServerBase):
                  database_file: Path,
                  duckdb_threads: int,
                  duckdb_memory_limit: str,
+                 logger,
                  tls_certificates=None,
                  verify_client=False,
                  root_certificates=None,
@@ -40,11 +102,7 @@ class FlightServer(pa.flight.FlightServerBase):
                  log_file: str = None,
                  log_file_mode: str = None
                  ):
-        self.logger = get_logger(filename=log_file,
-                                 filemode=log_file_mode,
-                                 logger_name="flight_server",
-                                 log_level=getattr(logging, log_level.upper())
-                                 )
+        self.logger = logger
 
         redacted_locals = {key: value for key, value in locals().items() if key not in ["tls_certificates",
                                                                                         "root_certificates"
@@ -109,7 +167,7 @@ class FlightServer(pa.flight.FlightServerBase):
         except Exception as e:
             error_message = f"{self.class_name}._make_flight_info - Error: {str(e)}"
             self.logger.error(msg=error_message)
-            pass   # Do not raise the error, as it would terminate the server...
+            raise pa.flight.FlightError(error_message)
         else:
             return pyarrow.flight.FlightInfo(schema=schema,
                                              descriptor=descriptor,
@@ -155,7 +213,7 @@ class FlightServer(pa.flight.FlightServerBase):
         else:
             error_message = f"{self.class_name}.do_get - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
-            pass  # Do not raise the error, as it would terminate the server...
+            raise pa.flight.FlightError(error_message)
 
 
 @click.command()
@@ -219,6 +277,22 @@ class FlightServer(pa.flight.FlightServerBase):
     help="If you provide verify-client, you must supply an MTLS CA Certificate file (public key only)"
 )
 @click.option(
+    "--flight-username",
+    type=str,
+    default=os.getenv("FLIGHT_USERNAME"),
+    required=False,
+    show_default=False,
+    help="If supplied, authentication will be required from clients to connect with this username"
+)
+@click.option(
+    "--flight-password",
+    type=str,
+    default=os.getenv("FLIGHT_PASSWORD"),
+    required=False,
+    show_default=False,
+    help="If supplied, authentication will be required from clients to connect with this password"
+)
+@click.option(
     "--log-level",
     type=click.Choice(["INFO", "DEBUG", "WARNING", "CRITICAL"], case_sensitive=False),
     default="INFO",
@@ -245,6 +319,8 @@ def run_flight_server(host: str,
                       tls: list,
                       verify_client: bool,
                       mtls: str,
+                      flight_username: str,
+                      flight_password: str,
                       log_level: str,
                       log_file: str,
                       log_file_mode: str
@@ -263,12 +339,28 @@ def run_flight_server(host: str,
     if verify_client:
         if not mtls:
             raise RuntimeError("You MUST provide a CA certificate public key file path if 'verify_client' is True, aborting.")
-        else:
-            if not tls:
-                raise RuntimeError("TLS must be enabled in order to use MTLS, aborting.")
-            else:
-                with open(mtls, "rb") as mtls_ca_file:
-                    root_certificates = mtls_ca_file.read()
+
+        if not tls:
+            raise RuntimeError("TLS must be enabled in order to use MTLS, aborting.")
+
+        with open(mtls, "rb") as mtls_ca_file:
+            root_certificates = mtls_ca_file.read()
+
+    logger = get_logger(filename=log_file,
+                        filemode=log_file_mode,
+                        logger_name="flight_server",
+                        log_level=getattr(logging, log_level.upper())
+                        )
+
+    auth_handler = None
+    if flight_username and flight_password:
+        if not tls:
+            raise RuntimeError("TLS must be enabled in order to use authentication, aborting.")
+        auth_handler = TokenServerAuthHandler(creds={flight_username: flight_password},
+                                              cert=tls_cert_chain,
+                                              key=tls_private_key,
+                                              logger=logger
+                                              )
 
     host_uri = f"{scheme}://{host}:{port}"
     location_uri = f"{scheme}://{location}:{port}"
@@ -277,9 +369,11 @@ def run_flight_server(host: str,
                           database_file=Path(database_file),
                           duckdb_threads=duckdb_threads,
                           duckdb_memory_limit=duckdb_memory_limit,
+                          logger=logger,
                           tls_certificates=tls_certificates,
                           verify_client=verify_client,
                           root_certificates=root_certificates,
+                          auth_handler=auth_handler,
                           log_level=log_level,
                           log_file=log_file,
                           log_file_mode=log_file_mode

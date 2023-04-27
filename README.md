@@ -123,3 +123,49 @@ flight-client --host=localhost \
               --tls-roots=tls/server.crt \
               --mtls=tls/client.crt tls/client.key
 ```
+
+### Option 4) Running the Flight Ibis Server / Client demo with username/password authentication, TLS, and MTLS authentication (most secure)
+
+#### Run the example
+##### 1. Generate a localhost TLS certificate keypair
+```shell
+. ./venv/bin/activate
+flight-create-tls-keypair
+
+```
+
+##### 2. Generate a Certificate Authority (CA) keypair - used to sign client certificates
+```shell
+. ./venv/bin/activate
+flight-create-mtls-ca-keypair
+
+```
+
+##### 3. Generate a Client Certificate keypair (signed by the CA you just created in step #2 above)
+```shell
+. ./venv/bin/activate
+flight-create-mtls-client-keypair
+
+```
+
+##### 4. Run the Flight Server requiring a specified username/password - with TLS and MTLS enabled (using the certificates created in the steps above)
+```shell
+. ./venv/bin/activate
+flight-server --tls=tls/server.crt tls/server.key \
+              --verify-client \
+              --mtls=tls/ca.crt \
+              --flight-username=test \
+              --flight-password=testing123
+              
+```
+
+##### 5. Open another terminal (leave the server running) - and run the Flight Client using the same username/password - with TLS and MTLS enabled
+```shell
+. ./venv/bin/activate
+flight-client --host=localhost \
+              --tls \
+              --tls-roots=tls/server.crt \
+              --mtls=tls/client.crt tls/client.key \
+              --flight-username=test \
+              --flight-password=testing123
+```
