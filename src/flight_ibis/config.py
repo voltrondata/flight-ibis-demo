@@ -38,6 +38,8 @@ def get_logger(filename: str = None,
     console_handler.setLevel(level=log_level)
     console_handler.setFormatter(fmt=formatter)
 
+    logger.addHandler(hdlr=console_handler)
+
     # Create a file handler to log to a file
     if filename:
         file_handler = logging.FileHandler(filename=LOG_DIR / filename,
@@ -45,8 +47,5 @@ def get_logger(filename: str = None,
         file_handler.setLevel(level=log_level)
         file_handler.setFormatter(fmt=formatter)
         logger.addHandler(hdlr=file_handler)
-
-    # Add both handlers to the logger
-    logger.addHandler(hdlr=console_handler)
 
     return logger
