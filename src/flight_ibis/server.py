@@ -46,7 +46,10 @@ class FlightServer(pa.flight.FlightServerBase):
                                  log_level=getattr(logging, log_level.upper())
                                  )
 
-        redacted_locals = {key: value for key, value in locals().items() if key not in ["tls_certificates"]}
+        redacted_locals = {key: value for key, value in locals().items() if key not in ["tls_certificates",
+                                                                                        "root_certificates"
+                                                                                        ]
+                           }
         self.logger.info(msg=f"Flight Server init args: {redacted_locals}")
 
         if not database_file.exists():
