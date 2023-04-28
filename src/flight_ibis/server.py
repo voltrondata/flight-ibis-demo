@@ -4,11 +4,12 @@ import pyarrow.flight
 import pyarrow.parquet
 import json
 from munch import Munch, munchify
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import ibis
 import duckdb
 import jwt
+import uuid
 import os
 from OpenSSL import crypto
 from . import __version__ as flight_server_version
@@ -23,6 +24,7 @@ BEGINNING_OF_TIME: datetime = datetime(year=1775, month=11, day=10)
 END_OF_TIME: datetime = datetime(year=9999, month=12, day=25)  # Merry last Christmas!
 PYARROW_UNKNOWN: int = -1
 JWT_ISS = "Flight Ibis"
+JWT_AUD = "Flight Ibis"
 
 
 class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
@@ -51,12 +53,18 @@ class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
 
         if username in self.creds and self.creds[username] == password:
             # Create a JWT and sign it with our private key
-            token = jwt.encode(payload=dict(username=username,
-                                            iss=JWT_ISS
+            token = jwt.encode(payload=dict(jti=str(uuid.uuid4()),
+                                            iss=JWT_ISS,
+                                            sub=username,
+                                            aud=JWT_AUD,
+                                            iat=datetime.utcnow(),
+                                            nbf=datetime.utcnow() - timedelta(minutes=1),
+                                            exp=datetime.now(tz=timezone.utc) + timedelta(hours=24),
                                             ),
                                key=self.private_key,
                                algorithm="RS256"
                                )
+            self.logger.debug(token)
             outgoing.write(token.encode())
             self.logger.info(msg=f"{self.class_name}.authenticate - User: '{username}' successfully authenticated - issued JWT.")
         else:
@@ -70,16 +78,17 @@ class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
             decoded_jwt = jwt.decode(jwt=token.decode(),
                                      key=self.public_key,
                                      algorithms=["RS256"],
-                                     issuer=JWT_ISS
+                                     issuer=JWT_ISS,
+                                     audience=JWT_AUD
                                      )
         except Exception as e:
             error_message = f"{self.class_name}.is_valid - jwt.decode failed with Exception: {str(e)}"
             self.logger.exception(msg=error_message)
             raise pa.flight.FlightError(error_message)
         else:
-            username = decoded_jwt.get("username")
-            self.logger.debug(msg=f"{self.class_name}.is_valid - JWT with username: '{username}' was successfully verified")
-            return username.encode()
+            subject = decoded_jwt.get("sub")
+            self.logger.debug(msg=f"{self.class_name}.is_valid - JWT with subject: '{subject}' was successfully verified")
+            return subject.encode()
 
 
 class FlightServer(pa.flight.FlightServerBase):
