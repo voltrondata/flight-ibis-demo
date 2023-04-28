@@ -64,7 +64,6 @@ class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
                                key=self.private_key,
                                algorithm="RS256"
                                )
-            self.logger.debug(token)
             outgoing.write(token.encode())
             self.logger.info(msg=f"{self.class_name}.authenticate - User: '{username}' successfully authenticated - issued JWT.")
         else:
