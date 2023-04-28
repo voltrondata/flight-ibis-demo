@@ -83,13 +83,14 @@ class TokenClientAuthHandler(pyarrow.flight.ClientAuthHandler):
 @click.option(
     "--log-level",
     type=click.Choice(["INFO", "DEBUG", "WARNING", "CRITICAL"], case_sensitive=False),
-    default="INFO",
+    default=os.getenv("LOG_LEVEL", "INFO"),
+    required=True,
     help="The logging level to use"
 )
 @click.option(
     "--log-file",
     type=str,
-    default=None,
+    required=False,
     help="The log file to write to.  If None, will just log to stdout"
 )
 @click.option(

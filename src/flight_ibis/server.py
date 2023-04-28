@@ -228,13 +228,15 @@ class FlightServer(pa.flight.FlightServerBase):
 @click.option(
     "--host",
     type=str,
-    default=LOCALHOST_IP_ADDRESS,
+    default=os.getenv("FLIGHT_HOST", LOCALHOST_IP_ADDRESS),
+    required=True,
     help="Address (or hostname) to listen on"
 )
 @click.option(
     "--location",
     type=str,
-    default=LOCALHOST,
+    default=os.getenv("FLIGHT_LOCATION", LOCALHOST),
+    required=True,
     help=("Address or hostname for TLS and endpoint generation.  This is needed if running the Flight server behind a load balancer and/or "
           "a reverse proxy"
           )
@@ -242,38 +244,43 @@ class FlightServer(pa.flight.FlightServerBase):
 @click.option(
     "--port",
     type=int,
-    default=8815,
+    default=os.getenv("FLIGHT_PORT", 8815),
+    required=True,
     help="Port number to listen on"
 )
 @click.option(
     "--database-file",
     type=str,
-    default=DUCKDB_DB_FILE.as_posix(),
+    default=os.getenv("DATABASE_FILE", DUCKDB_DB_FILE.as_posix()),
+    required=True,
     help="The DuckDB database file used for servicing data requests..."
 )
 @click.option(
     "--duckdb-threads",
     type=int,
-    default=DUCKDB_THREADS,
+    required=True,
+    default=os.getenv("DUCKDB_THREADS", DUCKDB_THREADS),
     help="The number of threads to use for the DuckDB connection."
 )
 @click.option(
     "--duckdb-memory-limit",
     type=str,
-    default=DUCKDB_MEMORY_LIMIT,
+    required=True,
+    default=os.getenv("DUCKDB_MEMORY_LIMIT", DUCKDB_MEMORY_LIMIT),
     help="The amount of memory to use for the DuckDB connection"
 )
 @click.option(
     "--tls",
     nargs=2,
-    default=None,
+    default=os.getenv("FLIGHT_TLS"),
+    required=False,
     metavar=('CERTFILE', 'KEYFILE'),
     help="Enable transport-level security"
 )
 @click.option(
     "--verify-client/--no-verify-client",
     type=bool,
-    default=False,
+    default=(os.getenv("FLIGHT_VERIFY_CLIENT", "False").upper() == "TRUE"),
     show_default=True,
     required=True,
     help="enable mutual TLS and verify the client if True"
@@ -281,7 +288,8 @@ class FlightServer(pa.flight.FlightServerBase):
 @click.option(
     "--mtls",
     type=str,
-    default=None,
+    default=os.getenv("FLIGHT_MTLS"),
+    required=False,
     help="If you provide verify-client, you must supply an MTLS CA Certificate file (public key only)"
 )
 @click.option(
@@ -303,19 +311,21 @@ class FlightServer(pa.flight.FlightServerBase):
 @click.option(
     "--log-level",
     type=click.Choice(["INFO", "DEBUG", "WARNING", "CRITICAL"], case_sensitive=False),
-    default="INFO",
+    default=os.getenv("LOG_LEVEL", "INFO"),
+    required=True,
     help="The logging level to use"
 )
 @click.option(
     "--log-file",
     type=str,
-    default=None,
+    default=os.getenv("LOG_FILE"),
+    required=False,
     help="The log file to write to.  If None, will just log to stdout"
 )
 @click.option(
     "--log-file-mode",
     type=click.Choice(["a", "w"], case_sensitive=True),
-    default="w",
+    default=os.getenv("LOG_FILE_MODE", "w"),
     help="The log file mode, use value: a for 'append', and value: w to overwrite..."
 )
 def run_flight_server(host: str,
