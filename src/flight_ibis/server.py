@@ -14,7 +14,7 @@ import os
 from OpenSSL import crypto
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
-from .data_logic_ibis import get_golden_rule_facts
+from .data_logic_ibis import build_golden_rules_ibis_expression, get_golden_rule_facts
 
 # Constants
 LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
@@ -139,6 +139,7 @@ class FlightServer(pa.flight.FlightServerBase):
                                                    memory_limit=duckdb_memory_limit,
                                                    read_only=True
                                                    )
+        self.golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=self.ibis_connection)
 
         self.logger.info(f"Running Flight-Ibis server - version: {flight_server_version}")
         self.logger.info(f"Using PyArrow version: {pyarrow.__version__}")
@@ -168,7 +169,7 @@ class FlightServer(pa.flight.FlightServerBase):
             endpoints.append(pa.flight.FlightEndpoint(json.dumps(command_munch.toDict()), [self.location_uri]))
 
         try:
-            schema = get_golden_rule_facts(conn=self.ibis_connection,
+            schema = get_golden_rule_facts(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
                                            hash_bucket_num=99999,
                                            total_hash_buckets=1,
                                            min_date=BEGINNING_OF_TIME,
@@ -205,7 +206,7 @@ class FlightServer(pa.flight.FlightServerBase):
 
         if command_munch.command == "get_golden_rule_facts":
             try:
-                golden_rule_kwargs = dict(conn=self.ibis_connection,
+                golden_rule_kwargs = dict(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
                                           hash_bucket_num=command_kwargs.hash_bucket_num,
                                           total_hash_buckets=command_kwargs.total_hash_buckets,
                                           min_date=datetime.fromisoformat(command_kwargs.min_date),
