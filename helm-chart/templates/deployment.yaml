@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flight-ibis.fullname" . }}
+  labels:
+    {{- include "flight-ibis.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "flight-ibis.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "flight-ibis.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "flight-ibis.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: tls-volume
+          secret:
+            secretName: {{ include "flight-ibis.fullname" . }}-tls-secret
+            optional: false
+      containers:
+        - name: {{ .Chart.Name }}
+          command: [ "flight-server" ]
+          env:
+            - name: FLIGHT_LOCATION
+              value: {{ Values.FlightServerConfig.FLIGHT_LOCATION }}
+            - name: FLIGHT_PORT
+              value: {{ Values.FlightServerConfig.FLIGHT_PORT | quote }}
+            - name: DATABASE_FILE
+              value: {{ Values.FlightServerConfig.DATABASE_FILE }}
+            - name: DUCKDB_THREADS
+              values: {{ Values.FlightServerConfig.DUCKDB_THREADS | quote }}
+            - name: DUCKDB_MEMORY_LIMIT
+              values: {{ Values.FlightServerConfig.DUCKDB_MEMORY_LIMIT }}
+            - name: FLIGHT_TLS
+              values: {{ Values.FlightServerConfig.FLIGHT_TLS | default "tls/server.crt tls/server.key" }}
+            - name: FLIGHT_VERIFY_CLIENT
+              values: {{ Values.FlightServerConfig.FLIGHT_VERIFY_CLIENT | default "TRUE" }}
+            - name: FLIGHT_MTLS
+              values: {{ Values.FlightServerConfig.FLIGHT_MTLS | default "tls/ca.crt" }}
+            - name: FLIGHT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "flight-ibis.fullname" . }}-secret
+                  key: FLIGHT_USERNAME
+                  optional: false
+            - name: FLIGHT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "flight-ibis.fullname" . }}-secret
+                  key: FLIGHT_PASSWORD
+                  optional: false
+            - name: LOG_LEVEL
+              values: {{ Values.FlightServerConfig.LOG_LEVEL | default "INFO" }}
+          volumeMounts:
+            - mountPath: /opt/flight_ibis/tls
+              readOnly: true
+              name: tls-volume
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: flight
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

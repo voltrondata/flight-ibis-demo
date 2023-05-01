@@ -70,5 +70,8 @@ RUN pip install . && \
     rm -rf src build && \
     rm -f pyproject.toml
 
+# Build the seed database
+RUN flight-data-bootstrap
+
 # Open Flight server port
 EXPOSE 8815

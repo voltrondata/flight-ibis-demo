@@ -8,3 +8,4 @@ logs/*
 Dockerfile
 .gitignore
 k8s/
+helm-chart/
