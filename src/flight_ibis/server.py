@@ -282,7 +282,7 @@ class FlightServer(pa.flight.FlightServerBase):
 @click.option(
     "--tls",
     nargs=2,
-    default=os.getenv("FLIGHT_TLS"),
+    default=os.getenv("FLIGHT_TLS").split(" "),
     required=False,
     metavar=('CERTFILE', 'KEYFILE'),
     help="Enable transport-level security"

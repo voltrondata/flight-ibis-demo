@@ -9,3 +9,5 @@ Dockerfile
 .gitignore
 k8s/
 helm-chart/
+certbot/
+.github/
