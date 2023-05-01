@@ -173,11 +173,12 @@ def run_flight_client(host: str,
                             )
 
     # Display session authentication info (if applicable)
-    action = pyarrow.flight.Action("who-am-i", b"")
-    who_am_i_results = next(client.do_action(action=action))
-    authenticated_user = who_am_i_results.body.to_pybytes().decode()
-    if authenticated_user:
-        logger.info(f"Authenticated to server as user: {authenticated_user}")
+    if flight_username or mtls:
+        action = pyarrow.flight.Action("who-am-i", b"")
+        who_am_i_results = next(client.do_action(action=action))
+        authenticated_user = who_am_i_results.body.to_pybytes().decode()
+        if authenticated_user:
+            logger.info(f"Authenticated to server as user: {authenticated_user}")
 
     arg_dict = dict(num_threads=num_threads,
                     min_date=from_date.isoformat(),
