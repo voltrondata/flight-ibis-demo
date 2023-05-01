@@ -402,7 +402,7 @@ def run_flight_server(host: str,
         server.logger.exception(msg=f"Flight server had exception: {str(e)}")
         raise
     finally:
-        server.logger.info(msg="Flight server shutdown")
+        server.logger.warning(msg="Flight server shutdown")
         logging.shutdown()
 
 
