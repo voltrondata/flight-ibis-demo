@@ -13,10 +13,10 @@ image:
 FlightServerConfig:
   FLIGHT_LOCATION: flight-ibis.vdfieldeng.com
   FLIGHT_PORT: 8815
-  DATABASE_FILE: tpch.duckdb
+  DATABASE_FILE: data/tpch.duckdb
   DUCKDB_THREADS: 1
   DUCKDB_MEMORY_LIMIT: 4GB
-  FLIGHT_TLS: "['tls/server.crt', 'tls/server.key']"
+  FLIGHT_TLS: tls/server.crt tls/server.key
   FLIGHT_VERIFY_CLIENT: "TRUE"
   FLIGHT_MTLS: tls/ca.crt
   LOG_LEVEL: INFO
