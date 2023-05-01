@@ -1,0 +1,10 @@
+venv/
+build/
+src/flight_ibis.egg-info
+.idea/
+tls/*
+data/*
+logs/*
+Dockerfile
+.gitignore
+k8s/

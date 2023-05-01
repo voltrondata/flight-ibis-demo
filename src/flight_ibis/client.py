@@ -172,10 +172,12 @@ def run_flight_client(host: str,
                                                    )
                             )
 
-    # See if we are authenticated
+    # Display session authentication info (if applicable)
     action = pyarrow.flight.Action("who-am-i", b"")
     who_am_i_results = next(client.do_action(action=action))
-    logger.info(f"Authenticated to server as user: {who_am_i_results.body.to_pybytes().decode()}")
+    authenticated_user = who_am_i_results.body.to_pybytes().decode()
+    if authenticated_user:
+        logger.info(f"Authenticated to server as user: {authenticated_user}")
 
     arg_dict = dict(num_threads=num_threads,
                     min_date=from_date.isoformat(),
