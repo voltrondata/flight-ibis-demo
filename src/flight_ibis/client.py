@@ -1,6 +1,6 @@
 import pyarrow as pa
 import pyarrow.flight
-from datetime import datetime
+from datetime import date, datetime
 import json
 import click
 import logging
@@ -99,6 +99,27 @@ class TokenClientAuthHandler(pyarrow.flight.ClientAuthHandler):
     default="w",
     help="The log file mode, use value: a for 'append', and value: w to overwrite..."
 )
+@click.option(
+    "--from-date",
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    default=date(year=1994, month=1, day=1).isoformat(),
+    required=True,
+    help="The from date to use for the data filter - in ISO format (example: 2020-11-01) - for 01-November-2020"
+)
+@click.option(
+    "--to-date",
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    default=date(year=1995, month=12, day=31).isoformat(),
+    required=True,
+    help="The to date to use for the data filter - in ISO format (example: 2020-11-01) - for 01-November-2020"
+)
+@click.option(
+    "--num-threads",
+    type=int,
+    default=11,
+    required=True,
+    help="The number of server threads to use for pulling data"
+)
 def run_flight_client(host: str,
                       port: int,
                       tls: bool,
@@ -108,7 +129,10 @@ def run_flight_client(host: str,
                       flight_password: str,
                       log_level: str,
                       log_file: str,
-                      log_file_mode: str
+                      log_file_mode: str,
+                      from_date: datetime,
+                      to_date: datetime,
+                      num_threads: int
                       ):
     logger = get_logger(filename=log_file,
                         filemode=log_file_mode,
@@ -153,9 +177,9 @@ def run_flight_client(host: str,
     who_am_i_results = next(client.do_action(action=action))
     logger.info(f"Authenticated to server as user: {who_am_i_results.body.to_pybytes().decode()}")
 
-    arg_dict = dict(num_threads=11,
-                    min_date=datetime(year=1994, month=1, day=1).isoformat(),
-                    max_date=datetime(year=1995, month=12, day=31).isoformat()
+    arg_dict = dict(num_threads=num_threads,
+                    min_date=from_date.isoformat(),
+                    max_date=to_date.isoformat()
                     )
     command_dict = dict(command="get_golden_rule_facts",
                         kwargs=arg_dict
