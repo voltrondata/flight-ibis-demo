@@ -148,6 +148,11 @@ def run_flight_client(host: str,
                                                    )
                             )
 
+    # See if we are authenticated
+    action = pyarrow.flight.Action("who-am-i", b"")
+    who_am_i_results = next(client.do_action(action=action))
+    logger.info(f"Authenticated to server as user: {who_am_i_results.body.to_pybytes().decode()}")
+
     arg_dict = dict(num_threads=11,
                     min_date=datetime(year=1994, month=1, day=1).isoformat(),
                     max_date=datetime(year=1995, month=12, day=31).isoformat()

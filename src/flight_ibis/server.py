@@ -144,6 +144,10 @@ class FlightServer(pa.flight.FlightServerBase):
         self.logger.info(f"Using PyArrow version: {pyarrow.__version__}")
         self.logger.info(f"Using Ibis version: {ibis.__version__}")
         self.logger.info(f"Using DuckDB version: {duckdb.__version__}")
+        self.logger.info(f"Database details:")
+        self.logger.info(f"   Database file: {database_file.as_posix()}")
+        self.logger.info(f"   Threads: {duckdb_threads}")
+        self.logger.info(f"   Memory Limit: {duckdb_memory_limit}")
         self.logger.info(f"Serving on {self.host_uri} (generated end-points will refer to location: {self.location_uri})")
 
     def _make_flight_info(self, command):
@@ -222,6 +226,11 @@ class FlightServer(pa.flight.FlightServerBase):
             error_message = f"{self.class_name}.do_get - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
             raise pa.flight.FlightError(error_message)
+
+    def do_action(self, context, action):
+        if action.type == "who-am-i":
+            return [context.peer_identity(), context.peer().encode("utf-8")]
+        raise NotImplementedError
 
 
 @click.command()
