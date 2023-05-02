@@ -194,9 +194,14 @@ def run_flight_client(host: str,
     total_rows = 0
     for endpoint in flight.endpoints:
         reader = client.do_get(endpoint.ticket)
-        read_table: pa.Table = reader.read_all()
-        total_rows += read_table.num_rows
-        logger.info(msg=read_table.to_pandas().head())
+        first_chunk_for_endpoint = True
+        for chunk in reader:
+            data = chunk.data
+            if first_chunk_for_endpoint:
+                logger.info(msg=data.to_pandas().head())
+            total_rows += data.num_rows
+            first_chunk_for_endpoint = False
+
     logger.info(msg=f"Got {total_rows} rows total")
 
 

@@ -114,13 +114,13 @@ def get_golden_rule_facts(golden_rules_ibis_expression: ibis.Expr,
         logger.debug(f"get_golden_rule_facts - was called with args: {locals()}")
 
         pyarrow_dataset = (golden_rules_ibis_expression
-                           .to_pyarrow(params={p_hash_bucket_num: hash_bucket_num,
-                                               p_total_hash_buckets: total_hash_buckets,
-                                               p_min_date: min_date,
-                                               p_max_date: max_date,
-                                               p_schema_only: schema_only
-                                               }
-                                       )
+                           .to_pyarrow_batches(params={p_hash_bucket_num: hash_bucket_num,
+                                                       p_total_hash_buckets: total_hash_buckets,
+                                                       p_min_date: min_date,
+                                                       p_max_date: max_date,
+                                                       p_schema_only: schema_only
+                                                       }
+                                               )
                            )
 
         logger.debug(f"get_golden_rule_facts - successfully converted Ibis expression to PyArrow.")
@@ -148,12 +148,16 @@ if __name__ == '__main__':
     golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=conn)
     for i in range(1, TOTAL_HASH_BUCKETS + 1):
         logger.info(msg=f"Bucket #: {i}")
-        x = get_golden_rule_facts(golden_rules_ibis_expression=golden_rules_ibis_expression,
-                                  hash_bucket_num=i,
-                                  total_hash_buckets=TOTAL_HASH_BUCKETS,
-                                  min_date=datetime(year=1994, month=1, day=1),
-                                  max_date=datetime(year=1997, month=12, day=31),
-                                  schema_only=False,
-                                  existing_logger=logger
-                                  )
-        logger.info(msg=x.to_pandas().head(n=10))
+        reader = get_golden_rule_facts(golden_rules_ibis_expression=golden_rules_ibis_expression,
+                                       hash_bucket_num=i,
+                                       total_hash_buckets=TOTAL_HASH_BUCKETS,
+                                       min_date=datetime(year=1994, month=1, day=1),
+                                       max_date=datetime(year=1997, month=12, day=31),
+                                       schema_only=False,
+                                       existing_logger=logger
+                                       )
+        first_chunk_for_batch = True
+        for chunk in reader:
+            if first_chunk_for_batch:
+                logger.info(msg=chunk.to_pandas().head(n=10))
+            first_chunk_for_batch = False

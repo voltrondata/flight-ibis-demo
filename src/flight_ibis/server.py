@@ -215,14 +215,16 @@ class FlightServer(pa.flight.FlightServerBase):
                                           existing_logger=self.logger
                                           )
                 self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
-                dataset = get_golden_rule_facts(**golden_rule_kwargs)
+                reader = get_golden_rule_facts(**golden_rule_kwargs)
             except Exception as e:
                 error_message = f"{self.class_name}.get_flight_info - Exception: {str(e)}"
                 self.logger.exception(msg=error_message)
                 return pa.flight.FlightError(message=error_message)
             else:
-                self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a dataset with row count: {dataset.num_rows}")
-                return pa.flight.RecordBatchStream(dataset)
+                self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
+                return pa.flight.GeneratorStream(
+                    schema=reader.schema, generator=reader
+                )
         else:
             error_message = f"{self.class_name}.do_get - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
@@ -282,7 +284,7 @@ class FlightServer(pa.flight.FlightServerBase):
 @click.option(
     "--tls",
     nargs=2,
-    default=os.getenv("FLIGHT_TLS").split(" "),
+    default=os.getenv("FLIGHT_TLS").split(" ") if os.getenv("FLIGHT_TLS") else None,
     required=False,
     metavar=('CERTFILE', 'KEYFILE'),
     help="Enable transport-level security"
