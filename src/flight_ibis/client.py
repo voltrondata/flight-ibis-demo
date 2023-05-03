@@ -140,7 +140,10 @@ def run_flight_client(host: str,
                         log_level=getattr(logging, log_level.upper())
                         )
 
-    logger.info(msg=f"run_flight_client - was called with args: {locals()}")
+    redacted_locals = {key: value for key, value in locals().items() if key not in ["flight_password"
+                                                                                    ]
+                       }
+    logger.info(msg=f"run_flight_client - was called with args: {redacted_locals}")
 
     scheme = "grpc+tcp"
     connection_args = {}
