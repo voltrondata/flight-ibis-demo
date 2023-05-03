@@ -14,7 +14,7 @@ import os
 from OpenSSL import crypto
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
-from .data_logic_ibis import build_golden_rules_ibis_expression, get_golden_rule_facts
+from .data_logic_ibis import build_golden_rules_ibis_expression, get_golden_rule_fact_batches
 
 # Constants
 LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
@@ -169,14 +169,14 @@ class FlightServer(pa.flight.FlightServerBase):
             endpoints.append(pa.flight.FlightEndpoint(json.dumps(command_munch.toDict()), [self.location_uri]))
 
         try:
-            schema = get_golden_rule_facts(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
-                                           hash_bucket_num=99999,
-                                           total_hash_buckets=1,
-                                           min_date=BEGINNING_OF_TIME,
-                                           max_date=BEGINNING_OF_TIME,
-                                           schema_only=True,
-                                           existing_logger=self.logger
-                                           ).schema
+            schema = get_golden_rule_fact_batches(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
+                                                  hash_bucket_num=99999,
+                                                  total_hash_buckets=1,
+                                                  min_date=BEGINNING_OF_TIME,
+                                                  max_date=BEGINNING_OF_TIME,
+                                                  schema_only=True,
+                                                  existing_logger=self.logger
+                                                  ).schema
         except Exception as e:
             error_message = f"{self.class_name}._make_flight_info - Error: {str(e)}"
             self.logger.error(msg=error_message)
@@ -215,13 +215,14 @@ class FlightServer(pa.flight.FlightServerBase):
                                           existing_logger=self.logger
                                           )
                 self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
-                reader = get_golden_rule_facts(**golden_rule_kwargs)
+                reader = get_golden_rule_fact_batches(**golden_rule_kwargs)
             except Exception as e:
                 error_message = f"{self.class_name}.get_flight_info - Exception: {str(e)}"
                 self.logger.exception(msg=error_message)
                 return pa.flight.FlightError(message=error_message)
             else:
                 self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
+
                 return pa.flight.GeneratorStream(
                     schema=reader.schema, generator=reader
                 )

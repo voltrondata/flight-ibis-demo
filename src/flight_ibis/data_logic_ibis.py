@@ -10,7 +10,6 @@ SEMI_JOIN = "semi"
 MAX_ORDER_TOTALPRICE = 500_000.00
 MAX_PERCENT_RANK = 0.98
 
-
 # Ibis parameters (global in scope)
 p_schema_only = ibis.param(type="Boolean")
 p_min_date = ibis.param(type="date")
@@ -93,15 +92,15 @@ def build_golden_rules_ibis_expression(conn: ibis.BaseBackend):
     return golden_rule_facts_expr
 
 
-def get_golden_rule_facts(golden_rules_ibis_expression: ibis.Expr,
-                          hash_bucket_num: int,
-                          total_hash_buckets: int,
-                          min_date: datetime,
-                          max_date: datetime,
-                          schema_only: bool = False,
-                          existing_logger=None,
-                          log_file: str = None
-                          ) -> pyarrow.Table:
+def get_golden_rule_fact_batches(golden_rules_ibis_expression: ibis.Expr,
+                                 hash_bucket_num: int,
+                                 total_hash_buckets: int,
+                                 min_date: datetime,
+                                 max_date: datetime,
+                                 schema_only: bool = False,
+                                 existing_logger=None,
+                                 log_file: str = None
+                                 ) -> pyarrow.Table:
     try:
         if existing_logger:
             logger = existing_logger
@@ -113,7 +112,7 @@ def get_golden_rule_facts(golden_rules_ibis_expression: ibis.Expr,
 
         logger.debug(f"get_golden_rule_facts - was called with args: {locals()}")
 
-        pyarrow_dataset = (golden_rules_ibis_expression
+        pyarrow_batches = (golden_rules_ibis_expression
                            .to_pyarrow_batches(params={p_hash_bucket_num: hash_bucket_num,
                                                        p_total_hash_buckets: total_hash_buckets,
                                                        p_min_date: min_date,
@@ -129,7 +128,7 @@ def get_golden_rule_facts(golden_rules_ibis_expression: ibis.Expr,
         logger.exception(msg=f"get_golden_rule_facts - Exception: {str(e)}")
         raise
     else:
-        return pyarrow_dataset
+        return pyarrow_batches
     finally:
         logger.debug(msg=f"get_golden_rule_facts - Finally block")
         if not existing_logger:
@@ -148,14 +147,14 @@ if __name__ == '__main__':
     golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=conn)
     for i in range(1, TOTAL_HASH_BUCKETS + 1):
         logger.info(msg=f"Bucket #: {i}")
-        reader = get_golden_rule_facts(golden_rules_ibis_expression=golden_rules_ibis_expression,
-                                       hash_bucket_num=i,
-                                       total_hash_buckets=TOTAL_HASH_BUCKETS,
-                                       min_date=datetime(year=1994, month=1, day=1),
-                                       max_date=datetime(year=1997, month=12, day=31),
-                                       schema_only=False,
-                                       existing_logger=logger
-                                       )
+        reader = get_golden_rule_fact_batches(golden_rules_ibis_expression=golden_rules_ibis_expression,
+                                              hash_bucket_num=i,
+                                              total_hash_buckets=TOTAL_HASH_BUCKETS,
+                                              min_date=datetime(year=1994, month=1, day=1),
+                                              max_date=datetime(year=1997, month=12, day=31),
+                                              schema_only=False,
+                                              existing_logger=logger
+                                              )
         first_chunk_for_batch = True
         for chunk in reader:
             if first_chunk_for_batch:

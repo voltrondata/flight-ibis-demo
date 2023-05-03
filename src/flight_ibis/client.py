@@ -191,18 +191,27 @@ def run_flight_client(host: str,
 
     # Read content of the dataset
     flight = client.get_flight_info(command_descriptor)
+    total_endpoints = 0
+    total_chunks = 0
     total_rows = 0
+    total_bytes = 0
+
     for endpoint in flight.endpoints:
+        total_endpoints += 1
+        logger.debug(msg=f"Processing endpoint: {endpoint} ({total_endpoints})")
         reader = client.do_get(endpoint.ticket)
         first_chunk_for_endpoint = True
         for chunk in reader:
+            total_chunks += 1
             data = chunk.data
+            logger.debug(msg=f"Chunk size - rows: {data.num_rows} / bytes: {data.nbytes}")
             if first_chunk_for_endpoint:
                 logger.info(msg=data.to_pandas().head())
             total_rows += data.num_rows
+            total_bytes += data.nbytes
             first_chunk_for_endpoint = False
 
-    logger.info(msg=f"Got {total_rows} rows total")
+    logger.info(msg=f"Got {total_rows} rows total ({total_bytes} bytes) - from {total_endpoints} endpoints ({total_chunks} total chunks)")
 
 
 if __name__ == '__main__':
