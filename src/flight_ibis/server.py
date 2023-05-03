@@ -223,9 +223,13 @@ class FlightServer(pa.flight.FlightServerBase):
             else:
                 self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
 
-                return pa.flight.GeneratorStream(
-                    schema=reader.schema, generator=reader
-                )
+                def batch_generator():
+                    for batch in reader:
+                        start = datetime.now()
+                        yield batch
+                        self.logger.debug(msg=f"Batch send time: {datetime.now() - start}")
+
+                return pyarrow.flight.GeneratorStream(schema=reader.schema, generator=batch_generator())
         else:
             error_message = f"{self.class_name}.do_get - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
