@@ -189,7 +189,7 @@ class FlightServer(pa.flight.FlightServerBase):
                                              descriptor=descriptor,
                                              endpoints=endpoints,
                                              total_records=PYARROW_UNKNOWN,
-                                             total_bytes=-PYARROW_UNKNOWN
+                                             total_bytes=PYARROW_UNKNOWN
                                              )
 
     def get_flight_info(self, context, descriptor):
@@ -218,21 +218,14 @@ class FlightServer(pa.flight.FlightServerBase):
                                           existing_logger=self.logger
                                           )
                 self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
-                reader = get_golden_rule_fact_batches(**golden_rule_kwargs)
+                batch_reader = get_golden_rule_fact_batches(**golden_rule_kwargs)
             except Exception as e:
                 error_message = f"{self.class_name}.get_flight_info - Exception: {str(e)}"
                 self.logger.exception(msg=error_message)
                 return pa.flight.FlightError(message=error_message)
             else:
                 self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
-
-                def batch_generator():
-                    for batch in reader:
-                        start = datetime.now()
-                        yield batch
-                        self.logger.debug(msg=f"Batch send time: {datetime.now() - start}")
-
-                return pyarrow.flight.GeneratorStream(schema=reader.schema, generator=batch_generator())
+                return pyarrow.flight.GeneratorStream(schema=batch_reader.schema, generator=batch_reader)
         else:
             error_message = f"{self.class_name}.do_get - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
