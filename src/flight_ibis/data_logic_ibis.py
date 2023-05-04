@@ -2,16 +2,14 @@ import ibis
 from ibis import _
 from datetime import datetime
 import pyarrow
-from .config import DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, get_logger
+from .config import DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, TIMER_TEXT, get_logger
 from codetiming import Timer
-
 
 # Constants
 INNER_JOIN = "inner"
 SEMI_JOIN = "semi"
 MAX_ORDER_TOTALPRICE = 500_000.00
 MAX_PERCENT_RANK = 0.98
-TIMER_TEXT = "{name}: Elapsed time: {:.4f} seconds"
 
 
 # Ibis parameters (global in scope)
@@ -123,15 +121,20 @@ def get_golden_rule_fact_batches(golden_rules_ibis_expression: ibis.Expr,
 
         logger.debug(f"get_golden_rule_facts - was called with args: {locals()}")
 
-        pyarrow_batches = (golden_rules_ibis_expression
-                           .to_pyarrow_batches(params={p_hash_bucket_num: hash_bucket_num,
-                                                       p_total_hash_buckets: total_hash_buckets,
-                                                       p_min_date: min_date,
-                                                       p_max_date: max_date,
-                                                       p_schema_only: schema_only
-                                                       }
-                                               )
-                           )
+        with Timer(name=f"Run Golden Rules Ibis Expression query against DuckDB back-end",
+                   text=TIMER_TEXT,
+                   initial_text=True,
+                   logger=logger.debug
+                   ):
+            pyarrow_batches = (golden_rules_ibis_expression
+                               .to_pyarrow_batches(params={p_hash_bucket_num: hash_bucket_num,
+                                                           p_total_hash_buckets: total_hash_buckets,
+                                                           p_min_date: min_date,
+                                                           p_max_date: max_date,
+                                                           p_schema_only: schema_only
+                                                           }
+                                                   )
+                               )
 
         logger.debug(f"get_golden_rule_facts - successfully converted Ibis expression to PyArrow.")
 
@@ -147,8 +150,12 @@ def get_golden_rule_fact_batches(golden_rules_ibis_expression: ibis.Expr,
 
 
 if __name__ == '__main__':
-    with Timer(name=f"Running Golden Rules test", text=TIMER_TEXT):
-        logger = get_logger()
+    logger = get_logger()
+    with Timer(name=f"Run Golden Rules test",
+               text=TIMER_TEXT,
+               initial_text=True,
+               logger=logger.info
+               ):
         TOTAL_HASH_BUCKETS: int = 11
 
         conn = ibis.duckdb.connect(database=DUCKDB_DB_FILE,

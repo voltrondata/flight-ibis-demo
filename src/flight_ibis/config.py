@@ -10,6 +10,7 @@ DATA_DIR = Path("data").resolve()
 DUCKDB_DB_FILE = DATA_DIR / "tpch.duckdb"
 DUCKDB_THREADS = 4
 DUCKDB_MEMORY_LIMIT = "4GB"
+TIMER_TEXT = "{name}: Elapsed time: {:.4f} seconds"
 
 # Logging Constants
 LOGGING_FORMAT = '%(asctime)s - %(levelname)-8s %(message)s'
