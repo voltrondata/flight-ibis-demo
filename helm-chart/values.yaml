@@ -14,8 +14,8 @@ FlightServerConfig:
   FLIGHT_LOCATION: flight-ibis.vdfieldeng.com
   FLIGHT_PORT: 8815
   DATABASE_FILE: data/tpch.duckdb
-  DUCKDB_THREADS: 1
-  DUCKDB_MEMORY_LIMIT: 4GB
+  DUCKDB_THREADS: 4
+  DUCKDB_MEMORY_LIMIT: 12GB
   FLIGHT_TLS: tls/server.crt tls/server.key
   FLIGHT_VERIFY_CLIENT: "TRUE"
   FLIGHT_MTLS: tls/ca.crt
@@ -53,11 +53,11 @@ service:
 
 resources:
   limits:
-    cpu: 1
-    memory: 5Gi
+    cpu: 4
+    memory: 16Gi
   requests:
-    cpu: 900m
-    memory: 4Gi
+    cpu: 4
+    memory: 16Gi
 
 nodeSelector:
   alpha.eksctl.io/nodegroup-name: graviton-cpu-node-group
