@@ -170,8 +170,11 @@ def run_flight_client(host: str,
                 connection_args["cert_chain"] = tls_cert_chain
                 connection_args["private_key"] = tls_private_key
 
-        client = pyarrow.flight.FlightClient(f"{scheme}://{host}:{port}",
+        flight_server_uri = f"{scheme}://{host}:{port}"
+        client = pyarrow.flight.FlightClient(location=flight_server_uri,
                                              **connection_args)
+
+        logger.info(msg=f"Connected to Flight Server at location: {flight_server_uri}")
 
         if flight_username and flight_password:
             if not tls:
