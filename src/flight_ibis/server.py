@@ -14,7 +14,7 @@ import os
 from OpenSSL import crypto
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
-from .data_logic_ibis import build_golden_rules_ibis_expression, get_golden_rule_fact_batches
+from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, get_golden_rule_fact_batches
 
 # Constants
 LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
@@ -139,7 +139,10 @@ class FlightServer(pa.flight.FlightServerBase):
                                                    memory_limit=duckdb_memory_limit,
                                                    read_only=True
                                                    )
-        self.golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=self.ibis_connection)
+        self.customer_order_summary_expr = build_customer_order_summary_expr(conn=self.ibis_connection)
+        self.golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=self.ibis_connection,
+                                                                               customer_order_summary_expr=self.customer_order_summary_expr
+                                                                               )
 
         self.logger.info(f"Running Flight-Ibis server - version: {flight_server_version}")
         self.logger.info(f"Using PyArrow version: {pyarrow.__version__}")

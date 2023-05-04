@@ -33,7 +33,8 @@ dependencies = [
     "munch==2.5.*",
     "pyOpenSSL==23.1.*",
     "cryptography==40.0.*",
-    "pyjwt==2.6.*"
+    "pyjwt==2.6.*",
+    "codetiming==1.4.*"
 ]
 requires-python = ">=3.8"
 

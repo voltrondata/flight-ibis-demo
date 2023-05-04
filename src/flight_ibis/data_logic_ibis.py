@@ -3,12 +3,16 @@ from ibis import _
 from datetime import datetime
 import pyarrow
 from .config import DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, get_logger
+from codetiming import Timer
+
 
 # Constants
 INNER_JOIN = "inner"
 SEMI_JOIN = "semi"
 MAX_ORDER_TOTALPRICE = 500_000.00
 MAX_PERCENT_RANK = 0.98
+TIMER_TEXT = "{name}: Elapsed time: {:.4f} seconds"
+
 
 # Ibis parameters (global in scope)
 p_schema_only = ibis.param(type="Boolean")
@@ -18,7 +22,24 @@ p_total_hash_buckets = ibis.param(type="int")
 p_hash_bucket_num = ibis.param(type="int")
 
 
-def build_golden_rules_ibis_expression(conn: ibis.BaseBackend):
+def build_customer_order_summary_expr(conn: ibis.BaseBackend) -> ibis.Expr:
+    orders = conn.table("orders")
+
+    # Aggregate global order counts for use in a subsequent filter
+    customer_order_summary_expr = (orders
+                                   .group_by(_.o_custkey)
+                                   .aggregate(count_star=_.count())
+                                   .mutate(order_count_percent_rank=_.count_star.percent_rank()
+                                           .over(ibis.window(order_by=_.count_star))
+                                           )
+                                   .filter(_.order_count_percent_rank <= MAX_PERCENT_RANK)
+                                   ).cache()
+
+    return customer_order_summary_expr
+
+
+def build_golden_rules_ibis_expression(conn: ibis.BaseBackend,
+                                       customer_order_summary_expr: ibis.Expr) -> ibis.Expr:
     orders = conn.table("orders")
     lineitem = conn.table("lineitem")
     region = conn.table("region")
@@ -26,21 +47,11 @@ def build_golden_rules_ibis_expression(conn: ibis.BaseBackend):
     customer = conn.table("customer")
     part = conn.table("part")
 
-    # Aggregate global order counts for use in a subsequent filter
-    order_counts = (orders
-                    .group_by(_.o_custkey)
-                    .aggregate(count_star=_.count())
-                    .mutate(order_count_percent_rank=_.count_star.percent_rank()
-                            .over(ibis.window(order_by=_.count_star))
-                            )
-                    .filter(_.order_count_percent_rank <= MAX_PERCENT_RANK)
-                    .filter(p_schema_only == False)
-                    )
-
     # Filter orders to the hash bucket asked for
     # Filter out orders larger than MAX_ORDER_TOTALPRICE
     orders_prelim = (orders
                      .alias("orders_sql")
+                     .filter(p_schema_only == False)
                      .sql("SELECT orders_sql.*, hash(orders_sql.o_orderkey) AS hash_result FROM orders_sql")
                      .filter(_.o_orderdate.between(lower=p_min_date, upper=p_max_date))
                      .mutate(hash_bucket=(_.hash_result % p_total_hash_buckets))
@@ -51,7 +62,7 @@ def build_golden_rules_ibis_expression(conn: ibis.BaseBackend):
 
     # Filter out orders with customers that have more orders than the MAX_PERCENT_RANK
     # This simulates filtering out store cards
-    orders_pre_filtered = orders_prelim.filter((orders_prelim.o_custkey == order_counts.o_custkey).any())
+    orders_pre_filtered = orders_prelim.filter((orders_prelim.o_custkey == customer_order_summary_expr.o_custkey).any())
 
     # Filter out the European region
     region_filtered = (region
@@ -100,7 +111,7 @@ def get_golden_rule_fact_batches(golden_rules_ibis_expression: ibis.Expr,
                                  schema_only: bool = False,
                                  existing_logger=None,
                                  log_file: str = None
-                                 ) -> pyarrow.Table:
+                                 ) -> pyarrow.RecordBatchReader:
     try:
         if existing_logger:
             logger = existing_logger
@@ -136,27 +147,29 @@ def get_golden_rule_fact_batches(golden_rules_ibis_expression: ibis.Expr,
 
 
 if __name__ == '__main__':
-    logger = get_logger()
-    TOTAL_HASH_BUCKETS: int = 11
+    with Timer(name=f"Running Golden Rules test", text=TIMER_TEXT):
+        logger = get_logger()
+        TOTAL_HASH_BUCKETS: int = 11
 
-    conn = ibis.duckdb.connect(database=DUCKDB_DB_FILE,
-                               threads=DUCKDB_THREADS,
-                               memory_limit=DUCKDB_MEMORY_LIMIT,
-                               read_only=True
-                               )
-    golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=conn)
-    for i in range(1, TOTAL_HASH_BUCKETS + 1):
-        logger.info(msg=f"Bucket #: {i}")
-        reader = get_golden_rule_fact_batches(golden_rules_ibis_expression=golden_rules_ibis_expression,
-                                              hash_bucket_num=i,
-                                              total_hash_buckets=TOTAL_HASH_BUCKETS,
-                                              min_date=datetime(year=1994, month=1, day=1),
-                                              max_date=datetime(year=1997, month=12, day=31),
-                                              schema_only=False,
-                                              existing_logger=logger
-                                              )
-        first_chunk_for_batch = True
-        for chunk in reader:
-            if first_chunk_for_batch:
+        conn = ibis.duckdb.connect(database=DUCKDB_DB_FILE,
+                                   threads=DUCKDB_THREADS,
+                                   memory_limit=DUCKDB_MEMORY_LIMIT,
+                                   read_only=True
+                                   )
+
+        customer_order_summary_expr = build_customer_order_summary_expr(conn=conn)
+        golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=conn,
+                                                                          customer_order_summary_expr=customer_order_summary_expr
+                                                                          )
+        for i in range(1, TOTAL_HASH_BUCKETS + 1):
+            logger.info(msg=f"Bucket #: {i}")
+            reader = get_golden_rule_fact_batches(golden_rules_ibis_expression=golden_rules_ibis_expression,
+                                                  hash_bucket_num=i,
+                                                  total_hash_buckets=TOTAL_HASH_BUCKETS,
+                                                  min_date=datetime(year=1994, month=1, day=1),
+                                                  max_date=datetime(year=1997, month=12, day=31),
+                                                  schema_only=False,
+                                                  existing_logger=logger
+                                                  )
+            for chunk in reader:
                 logger.info(msg=chunk.to_pandas().head(n=10))
-            first_chunk_for_batch = False
