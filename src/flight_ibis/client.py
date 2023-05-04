@@ -181,7 +181,7 @@ def run_flight_client(host: str,
         who_am_i_results = list(client.do_action(action=action))[0]
         authenticated_user = who_am_i_results.body.to_pybytes().decode()
         if authenticated_user:
-            logger.info(f"Authenticated to server as user: {authenticated_user}")
+            logger.info(f"Authenticated to the Flight Server as user: {authenticated_user}")
 
     arg_dict = dict(num_threads=num_threads,
                     min_date=from_date.isoformat(),
