@@ -14,7 +14,7 @@ include = ["*"]  # package names should match these glob patterns (["*"] by defa
 
 [project]
 name = "flight-ibis"
-version = "0.0.6"
+version = "0.0.7"
 description = "An Apache Arrow Flight server/client example powered by Ibis and DuckDB"
 readme = "README.md"
 authors = [{ name = "Philip Moore", email = "prmoore77@hotmail.com" }]
@@ -53,7 +53,7 @@ flight-create-mtls-ca-keypair = "flight_ibis.setup.mtls_utilities:create_ca_keyp
 flight-create-mtls-client-keypair = "flight_ibis.setup.mtls_utilities:create_client_keypair"
 
 [tool.bumpver]
-current_version = "0.0.6"
+current_version = "0.0.7"
 version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
 commit_message = "bump version {old_version} -> {new_version}"
 commit = true
