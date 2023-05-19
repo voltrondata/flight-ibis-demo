@@ -1,6 +1,7 @@
 name: flight-ibis-ci
 
 on:
+  workflow_dispatch:
   release:
     types:
       - published
@@ -29,4 +30,6 @@ jobs:
         with:
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: prmoorevoltron/flight-ibis:latest
+          tags: |
+            prmoorevoltron/flight-ibis:latest
+            prmoorevoltron/flight-ibis:${{ github.ref_name }}
