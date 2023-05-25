@@ -11,10 +11,12 @@ spec:
       {{- include "flight-ibis.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        checksum/opaque-secrets: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        checksum/tls-secrets: {{ include (print $.Template.BasePath "/tls-secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
         {{- include "flight-ibis.selectorLabels" . | nindent 8 }}
     spec:
