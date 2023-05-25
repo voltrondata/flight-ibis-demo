@@ -33,6 +33,8 @@ def create_local_duckdb_database(database_file: str,
                                  overwrite: bool):
     logger.info(msg=f"create_local_duckdb_database - was called with args: {locals()}")
 
+    logger.info(msg=f"Using DuckDB version: {duckdb.__version__}")
+
     database_file_path = Path(database_file)
 
     if database_file_path.exists():
