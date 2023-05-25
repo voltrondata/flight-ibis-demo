@@ -28,7 +28,7 @@ keywords = ["flight-ibis", "flight", "ibis"]
 dependencies = [
     "pyarrow==11.0.*",
     "click==8.1.*",
-    "duckdb==0.8.*",
+    "duckdb==0.7.*",
     "ibis-framework[duckdb]==5.1.*",
     "munch==3.0.*",
     "pyOpenSSL==23.1.*",
