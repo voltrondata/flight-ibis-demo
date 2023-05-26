@@ -1,6 +1,6 @@
 #!/bin/bash
 
-certbot certonly --domains "*.vdfieldeng.com" \
+certbot certonly --domains="*.vdfieldeng.com" \
                  --manual \
                  --preferred-challenges=dns \
                  --email=philip@voltrondata.com \
