@@ -1,21 +1,24 @@
+import json
+import os
+import sys
+import uuid
+from datetime import datetime, timezone, timedelta
+from functools import cached_property
+from pathlib import Path
+
 import click
+import duckdb
+import ibis
+import jwt
 import pyarrow as pa
 import pyarrow.flight
 import pyarrow.parquet
-import json
-from munch import Munch, munchify
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-import ibis
-import duckdb
-import jwt
-import uuid
-import os
 from OpenSSL import crypto
+from munch import Munch, munchify
+
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
 from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, get_golden_rule_fact_batches
-from functools import cached_property
 
 # Constants
 LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
@@ -146,6 +149,7 @@ class FlightServer(pa.flight.FlightServerBase):
                                                                                )
 
         self.logger.info(f"Running Flight-Ibis server - version: {flight_server_version}")
+        self.logger.info(f"Using Python version: {sys.version}")
         self.logger.info(f"Using PyArrow version: {pyarrow.__version__}")
         self.logger.info(f"Using Ibis version: {ibis.__version__}")
         self.logger.info(f"Using DuckDB version: {duckdb.__version__}")
