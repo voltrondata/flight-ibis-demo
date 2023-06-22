@@ -5,7 +5,7 @@
 replicaCount: 11
 
 image:
-  repository: prmoorevoltron/flight-ibis
+  repository: voltrondata/flight-ibis
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: latest
