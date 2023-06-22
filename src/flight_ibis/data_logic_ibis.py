@@ -11,7 +11,6 @@ SEMI_JOIN = "semi"
 MAX_ORDER_TOTALPRICE = 500_000.00
 MAX_PERCENT_RANK = 0.98
 
-
 # Ibis parameters (global in scope)
 p_schema_only = ibis.param(type="Boolean")
 p_min_date = ibis.param(type="date")
@@ -126,13 +125,18 @@ def get_golden_rule_fact_batches(golden_rules_ibis_expression: ibis.Expr,
                    initial_text=True,
                    logger=logger.debug
                    ):
+            expr_params = {p_hash_bucket_num: hash_bucket_num,
+                           p_total_hash_buckets: total_hash_buckets,
+                           p_min_date: min_date,
+                           p_max_date: max_date,
+                           p_schema_only: schema_only
+                           }
+            logger.debug(msg=("SQL for Ibis Expression: golden_rules_ibis_expression: \n"
+                              f"{ibis.to_sql(expr=golden_rules_ibis_expression, params=expr_params)}"
+                              )
+                         )
             pyarrow_batches = (golden_rules_ibis_expression
-                               .to_pyarrow_batches(params={p_hash_bucket_num: hash_bucket_num,
-                                                           p_total_hash_buckets: total_hash_buckets,
-                                                           p_min_date: min_date,
-                                                           p_max_date: max_date,
-                                                           p_schema_only: schema_only
-                                                           }
+                               .to_pyarrow_batches(params=expr_params
                                                    )
                                )
 

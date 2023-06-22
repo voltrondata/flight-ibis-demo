@@ -15,6 +15,7 @@ from OpenSSL import crypto
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
 from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, get_golden_rule_fact_batches
+from functools import cached_property
 
 # Constants
 LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
@@ -28,7 +29,7 @@ JWT_AUD = "Flight Ibis"
 
 
 class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
-    @property
+    @cached_property
     def class_name(self):
         return self.__class__.__name__
 
@@ -91,7 +92,7 @@ class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
 
 
 class FlightServer(pa.flight.FlightServerBase):
-    @property
+    @cached_property
     def class_name(self):
         return self.__class__.__name__
 
@@ -154,10 +155,19 @@ class FlightServer(pa.flight.FlightServerBase):
         self.logger.info(f"   Memory Limit: {duckdb_memory_limit}")
         self.logger.info(f"Serving on {self.host_uri} (generated end-points will refer to location: {self.location_uri})")
 
-    def _make_flight_info(self, command):
-        self.logger.debug(msg=f"{self.class_name}._make_flight_info - command: {command}")
+    @cached_property
+    def schema(self):
+        return get_golden_rule_fact_batches(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
+                                             hash_bucket_num=99999,
+                                             total_hash_buckets=1,
+                                             min_date=BEGINNING_OF_TIME,
+                                             max_date=BEGINNING_OF_TIME,
+                                             schema_only=True,
+                                             existing_logger=self.logger
+                                             ).schema
 
-        command_munch: Munch = munchify(x=json.loads(command))
+    def _make_flight_info(self, command_munch: Munch):
+        self.logger.debug(msg=f"{self.class_name}._make_flight_info - was called with args: {locals()}")
 
         command_munch.kwargs.total_hash_buckets = min(MAX_THREADS, command_munch.kwargs.num_threads)
 
@@ -171,67 +181,83 @@ class FlightServer(pa.flight.FlightServerBase):
             command_munch.kwargs.hash_bucket_num = i
             endpoints.append(pa.flight.FlightEndpoint(json.dumps(command_munch.toDict()), [self.location_uri]))
 
-        try:
-            schema = get_golden_rule_fact_batches(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
-                                                  hash_bucket_num=99999,
-                                                  total_hash_buckets=1,
-                                                  min_date=BEGINNING_OF_TIME,
-                                                  max_date=BEGINNING_OF_TIME,
-                                                  schema_only=True,
-                                                  existing_logger=self.logger
-                                                  ).schema
-        except Exception as e:
-            error_message = f"{self.class_name}._make_flight_info - Error: {str(e)}"
-            self.logger.error(msg=error_message)
-            raise pa.flight.FlightError(error_message)
-        else:
-            return pyarrow.flight.FlightInfo(schema=schema,
-                                             descriptor=descriptor,
-                                             endpoints=endpoints,
-                                             total_records=PYARROW_UNKNOWN,
-                                             total_bytes=PYARROW_UNKNOWN
-                                             )
+        return pyarrow.flight.FlightInfo(schema=self.schema,
+                                         descriptor=descriptor,
+                                         endpoints=endpoints,
+                                         total_records=PYARROW_UNKNOWN,
+                                         total_bytes=PYARROW_UNKNOWN
+                                         )
 
-    def get_flight_info(self, context, descriptor):
-        self.logger.info(msg=f"{self.class_name}.get_flight_info - called with context = {context}, descriptor = {descriptor}")
-        flight_info = self._make_flight_info(descriptor.command.decode('utf-8'))
-        self.logger.info(msg=(f"{self.class_name}.get_flight_info - with context = {context}, descriptor = {descriptor}"
-                              f"- returning: FlightInfo ({dict(schema=flight_info.schema, endpoints=flight_info.endpoints)})"
-                              )
-                         )
-        return flight_info
+    def _check_command(self, command: dict) -> Munch:
+        self.logger.debug(msg=f"{self.class_name}._check_command - was called with args: {locals()}")
+        command_munch: Munch = munchify(x=command)
 
-    def do_get(self, context, ticket):
-        self.logger.info(msg=f"{self.class_name}.do_get - context = {context}, ticket = {ticket}")
-        command_munch: Munch = munchify(x=json.loads(ticket.ticket.decode('utf-8')))
-
-        command_kwargs = command_munch.kwargs
-
-        if command_munch.command == "get_golden_rule_facts":
-            try:
-                golden_rule_kwargs = dict(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
-                                          hash_bucket_num=command_kwargs.hash_bucket_num,
-                                          total_hash_buckets=command_kwargs.total_hash_buckets,
-                                          min_date=datetime.fromisoformat(command_kwargs.min_date),
-                                          max_date=datetime.fromisoformat(command_kwargs.max_date),
-                                          schema_only=False,
-                                          existing_logger=self.logger
-                                          )
-                self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
-                batch_reader = get_golden_rule_fact_batches(**golden_rule_kwargs)
-            except Exception as e:
-                error_message = f"{self.class_name}.get_flight_info - Exception: {str(e)}"
-                self.logger.exception(msg=error_message)
-                return pa.flight.FlightError(message=error_message)
-            else:
-                self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
-                return pyarrow.flight.GeneratorStream(schema=batch_reader.schema, generator=batch_reader)
-        else:
+        if command_munch.command != "get_golden_rule_facts":
             error_message = f"{self.class_name}.do_get - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
             raise pa.flight.FlightError(error_message)
+        else:
+            return command_munch
+
+    def _get_descriptor_command(self, descriptor) -> dict:
+        self.logger.debug(msg=f"{self.class_name}._get_descriptor_command - was called with args: {locals()}")
+        return json.loads(descriptor.command.decode('utf-8'))
+
+    def _get_ticket_command(self, ticket) -> dict:
+        self.logger.debug(msg=f"{self.class_name}._get_ticket_command - was called with args: {locals()}")
+        return json.loads(ticket.ticket.decode('utf-8'))
+
+    def get_flight_info(self, context, descriptor):
+        self.logger.info(msg=f"{self.class_name}.get_flight_info - was called with args: {locals()}")
+        command = self._get_descriptor_command(descriptor=descriptor)
+        command_munch = self._check_command(command=command)
+
+        if command_munch.command == "get_golden_rule_facts":
+            self.logger.info(msg=f"{self.class_name}.get_flight_info - called with context = {context}, descriptor = {descriptor}")
+            flight_info = self._make_flight_info(command_munch=command_munch)
+            self.logger.info(msg=(f"{self.class_name}.get_flight_info - with context = {context}, descriptor = {descriptor}"
+                                  f"- returning: FlightInfo ({dict(schema=flight_info.schema, endpoints=flight_info.endpoints)})"
+                                  )
+                             )
+            return flight_info
+
+    def get_schema(self, context, descriptor):
+        self.logger.info(msg=f"{self.class_name}.get_schema - was called with args: {locals()}")
+        command = self._get_descriptor_command(descriptor=descriptor)
+        _ = self._check_command(command=command)
+        self.logger.info(msg=(f"{self.class_name}.get_schema - with context = {context}, descriptor = {descriptor}"
+                              f"- returning: Schema ({dict(schema=self.schema)})"
+                              )
+                         )
+        return self.schema
+
+    def do_get(self, context, ticket):
+        self.logger.info(msg=f"{self.class_name}.do_get - was called with args: {locals()}")
+
+        try:
+            command = self._get_ticket_command(ticket=ticket)
+            command_munch = self._check_command(command=command)
+
+            golden_rule_kwargs = dict(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
+                                      hash_bucket_num=command_munch.kwargs.hash_bucket_num,
+                                      total_hash_buckets=command_munch.kwargs.total_hash_buckets,
+                                      min_date=datetime.fromisoformat(command_munch.kwargs.min_date),
+                                      max_date=datetime.fromisoformat(command_munch.kwargs.max_date),
+                                      schema_only=False,
+                                      existing_logger=self.logger
+                                      )
+            self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
+            batch_reader = get_golden_rule_fact_batches(**golden_rule_kwargs)
+        except Exception as e:
+            error_message = f"{self.class_name}.get_flight_info - Exception: {str(e)}"
+            self.logger.exception(msg=error_message)
+            return pa.flight.FlightError(message=error_message)
+        else:
+            self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
+            return pyarrow.flight.GeneratorStream(schema=batch_reader.schema, generator=batch_reader)
 
     def do_action(self, context, action):
+        self.logger.info(msg=f"{self.class_name}.do_action - was called with args: {locals()}")
         if action.type == "who-am-i":
             return [context.peer_identity(), context.peer().encode("utf-8")]
         raise NotImplementedError
