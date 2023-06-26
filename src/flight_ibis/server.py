@@ -19,6 +19,8 @@ from munch import Munch, munchify
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
 from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, get_golden_rule_fact_batches
+from pyarrow.flight import SchemaResult
+
 
 # Constants
 LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
@@ -160,7 +162,7 @@ class FlightServer(pa.flight.FlightServerBase):
         self.logger.info(f"Serving on {self.host_uri} (generated end-points will refer to location: {self.location_uri})")
 
     @cached_property
-    def schema(self):
+    def schema(self) -> pyarrow.Schema:
         return get_golden_rule_fact_batches(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
                                              hash_bucket_num=99999,
                                              total_hash_buckets=1,
@@ -170,7 +172,7 @@ class FlightServer(pa.flight.FlightServerBase):
                                              existing_logger=self.logger
                                              ).schema
 
-    def _make_flight_info(self, command_munch: Munch):
+    def _make_flight_info(self, command_munch: Munch) -> pyarrow.flight.FlightInfo:
         self.logger.debug(msg=f"{self.class_name}._make_flight_info - was called with args: {locals()}")
 
         command_munch.kwargs.total_hash_buckets = min(MAX_THREADS, command_munch.kwargs.num_threads)
@@ -211,7 +213,7 @@ class FlightServer(pa.flight.FlightServerBase):
         self.logger.debug(msg=f"{self.class_name}._get_ticket_command - was called with args: {locals()}")
         return json.loads(ticket.ticket.decode('utf-8'))
 
-    def get_flight_info(self, context, descriptor):
+    def get_flight_info(self, context, descriptor) -> pyarrow.flight.FlightInfo:
         self.logger.info(msg=f"{self.class_name}.get_flight_info - was called with args: {locals()}")
         command = self._get_descriptor_command(descriptor=descriptor)
         command_munch = self._check_command(command=command)
@@ -225,7 +227,7 @@ class FlightServer(pa.flight.FlightServerBase):
                              )
             return flight_info
 
-    def get_schema(self, context, descriptor):
+    def get_schema(self, context, descriptor) -> pyarrow.Schema:
         self.logger.info(msg=f"{self.class_name}.get_schema - was called with args: {locals()}")
         command = self._get_descriptor_command(descriptor=descriptor)
         _ = self._check_command(command=command)
@@ -233,9 +235,9 @@ class FlightServer(pa.flight.FlightServerBase):
                               f"- returning: Schema ({dict(schema=self.schema)})"
                               )
                          )
-        return self.schema
+        return SchemaResult(self.schema)
 
-    def do_get(self, context, ticket):
+    def do_get(self, context, ticket) -> pyarrow.flight.FlightDataStream:
         self.logger.info(msg=f"{self.class_name}.do_get - was called with args: {locals()}")
 
         try:
@@ -260,7 +262,7 @@ class FlightServer(pa.flight.FlightServerBase):
             self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
             return pyarrow.flight.GeneratorStream(schema=batch_reader.schema, generator=batch_reader)
 
-    def do_action(self, context, action):
+    def do_action(self, context, action) -> list:
         self.logger.info(msg=f"{self.class_name}.do_action - was called with args: {locals()}")
         if action.type == "who-am-i":
             return [context.peer_identity(), context.peer().encode("utf-8")]
