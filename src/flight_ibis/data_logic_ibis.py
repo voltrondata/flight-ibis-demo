@@ -37,8 +37,11 @@ def build_customer_order_summary_expr(conn: ibis.BaseBackend) -> ibis.Expr:
 
 def build_golden_rules_ibis_expression(conn: ibis.BaseBackend,
                                        customer_order_summary_expr: ibis.Expr) -> ibis.Expr:
-    orders = conn.table("orders")
-    lineitem = conn.table("lineitem")
+    orders = conn.table("orders").mutate(o_totalprice=_.o_totalprice.cast("double"))
+    lineitem = conn.table("lineitem").mutate(l_extendedprice=_.l_extendedprice.cast("double"),
+                                             l_discount=_.l_discount.cast("double"),
+                                             l_tax=_.l_tax.cast("double")
+                                             )
     region = conn.table("region")
     nation = conn.table("nation")
     customer = conn.table("customer")
