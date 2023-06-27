@@ -25,6 +25,8 @@ from pyarrow.flight import SchemaResult
 # Constants
 LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
 LOCALHOST: str = "localhost"
+GRPC_TCP_SCHEME: str = "grpc+tcp"  # No TLS enabled...
+GRPC_TLS_SCHEME: str = "grpc+tls"
 MAX_THREADS: int = 11
 BEGINNING_OF_TIME: datetime = datetime(year=1775, month=11, day=10)
 END_OF_TIME: datetime = datetime(year=9999, month=12, day=25)  # Merry last Christmas!
@@ -280,7 +282,7 @@ class FlightServer(pa.flight.FlightServerBase):
 @click.option(
     "--location",
     type=str,
-    default=os.getenv("FLIGHT_LOCATION", LOCALHOST),
+    default=os.getenv("FLIGHT_LOCATION", f"{GRPC_TCP_SCHEME}://{LOCALHOST}:{os.getenv('FLIGHT_PORT', 8815)}"),
     required=True,
     help=("Address or hostname for TLS and endpoint generation.  This is needed if running the Flight server behind a load balancer and/or "
           "a reverse proxy"
@@ -389,9 +391,9 @@ def run_flight_server(host: str,
                       log_file_mode: str
                       ):
     tls_certificates = []
-    scheme = "grpc+tcp"
+    scheme = GRPC_TCP_SCHEME
     if tls:
-        scheme = "grpc+tls"
+        scheme = GRPC_TLS_SCHEME
         with open(tls[0], "rb") as cert_file:
             tls_cert_chain = cert_file.read()
         with open(tls[1], "rb") as key_file:
@@ -426,9 +428,8 @@ def run_flight_server(host: str,
                                               )
 
     host_uri = f"{scheme}://{host}:{port}"
-    location_uri = f"{scheme}://{location}:{port}"
     server = FlightServer(host_uri=host_uri,
-                          location_uri=location_uri,
+                          location_uri=location,
                           database_file=Path(database_file),
                           duckdb_threads=duckdb_threads,
                           duckdb_memory_limit=duckdb_memory_limit,

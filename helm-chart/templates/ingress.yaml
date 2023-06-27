@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "flight-ibis.fullname" . }}-ingress
+  labels:
+    {{- include "flight-ibis.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - flight-ibis-nginx.vdfieldeng.com
+  rules:
+  - host: flight-ibis-nginx.vdfieldeng.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "flight-ibis.fullname" . }}
+            port:
+              name: flight

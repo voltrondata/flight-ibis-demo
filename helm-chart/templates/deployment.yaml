@@ -48,7 +48,7 @@ spec:
             - name: DUCKDB_MEMORY_LIMIT
               value: {{ .Values.FlightServerConfig.DUCKDB_MEMORY_LIMIT }}
             - name: FLIGHT_TLS
-              value: {{ .Values.FlightServerConfig.FLIGHT_TLS | default "tls/server.crt tls/server.key" }}
+              value: {{ .Values.FlightServerConfig.FLIGHT_TLS }}
             - name: FLIGHT_VERIFY_CLIENT
               value: {{ .Values.FlightServerConfig.FLIGHT_VERIFY_CLIENT | quote }}
             - name: FLIGHT_MTLS
