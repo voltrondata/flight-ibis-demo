@@ -31,11 +31,12 @@ dependencies = [
     "duckdb==0.7.*",
     "ibis-framework[duckdb]==5.1.*",
     "munch==3.0.*",
-    "pyOpenSSL==23.1.*",
+    "pyOpenSSL==23.2.*",
     "cryptography==40.0.*",
     "pyjwt==2.7.*",
     "codetiming==1.4.*",
-    "pyspark==3.4.0"
+    "pyspark==3.4.1",
+    "urllib3==2.0.*"
 ]
 requires-python = ">=3.8"
 
@@ -43,11 +44,12 @@ requires-python = ">=3.8"
 dev = ["bumpver", "pip-tools", "pytest"]
 
 [project.urls]
-Homepage = "https://github.com/voltrondata/k8s-flight-demo"
+Homepage = "https://github.com/voltrondata/flight-ibis-demo"
 
 [project.scripts]
 flight-server = "flight_ibis.server:run_flight_server"
 flight-client = "flight_ibis.client:run_flight_client"
+flight-spark-client = "flight_ibis.spark_client_test:run_spark_flight_client"
 flight-data-bootstrap = "flight_ibis.setup.create_local_duckdb_database:create_local_duckdb_database"
 flight-create-tls-keypair = "flight_ibis.setup.tls_utilities:create_tls_keypair"
 flight-create-mtls-ca-keypair = "flight_ibis.setup.mtls_utilities:create_ca_keypair"

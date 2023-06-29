@@ -52,7 +52,7 @@ spec:
             - name: FLIGHT_VERIFY_CLIENT
               value: {{ .Values.FlightServerConfig.FLIGHT_VERIFY_CLIENT | quote }}
             - name: FLIGHT_MTLS
-              value: {{ .Values.FlightServerConfig.FLIGHT_MTLS | default "tls/ca.crt" }}
+              value: {{ .Values.FlightServerConfig.FLIGHT_MTLS }}
             - name: FLIGHT_USERNAME
               valueFrom:
                 secretKeyRef:

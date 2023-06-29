@@ -7,28 +7,7 @@ import logging
 import os
 from codetiming import Timer
 from .config import TIMER_TEXT, get_logger
-
-
-# Constants
-LOCALHOST: str = "0.0.0.0"
-
-
-class TokenClientAuthHandler(pyarrow.flight.ClientAuthHandler):
-    """An example implementation of authentication via handshake."""
-
-    def __init__(self, username, password):
-        super().__init__()
-        self.username = username
-        self.password = password
-        self.token = b''
-
-    def authenticate(self, outgoing, incoming):
-        outgoing.write(self.username)
-        outgoing.write(self.password)
-        self.token = incoming.read()
-
-    def get_token(self):
-        return self.token
+from .constants import LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME
 
 
 @click.command()
@@ -152,10 +131,10 @@ def run_flight_client(host: str,
                            }
         logger.info(msg=f"run_flight_client - was called with args: {redacted_locals}")
 
-        scheme = "grpc+tcp"
+        scheme = GRPC_TCP_SCHEME
         connection_args = {}
         if tls:
-            scheme = "grpc+tls"
+            scheme = GRPC_TLS_SCHEME
             if tls_roots:
                 with open(tls_roots, "rb") as root_certs:
                     connection_args["tls_root_certs"] = root_certs.read()
@@ -164,11 +143,11 @@ def run_flight_client(host: str,
                 raise RuntimeError("TLS must be enabled in order to use MTLS, aborting.")
             else:
                 with open(mtls[0], "rb") as cert_file:
-                    tls_cert_chain = cert_file.read()
+                    mtls_cert_chain = cert_file.read()
                 with open(mtls[1], "rb") as key_file:
-                    tls_private_key = key_file.read()
-                connection_args["cert_chain"] = tls_cert_chain
-                connection_args["private_key"] = tls_private_key
+                    mtls_private_key = key_file.read()
+                connection_args["cert_chain"] = mtls_cert_chain
+                connection_args["private_key"] = mtls_private_key
 
         flight_server_uri = f"{scheme}://{host}:{port}"
         client = pyarrow.flight.FlightClient(location=flight_server_uri,
@@ -176,19 +155,20 @@ def run_flight_client(host: str,
 
         logger.info(msg=f"Connected to Flight Server at location: {flight_server_uri}")
 
+        options = None
         if flight_username and flight_password:
             if not tls:
                 raise RuntimeError("TLS must be enabled in order to use authentication, aborting.")
-
-            client.authenticate(TokenClientAuthHandler(username=flight_username,
-                                                       password=flight_password
-                                                       )
-                                )
+            token_pair = client.authenticate_basic_token(username=flight_username.encode(),
+                                                         password=flight_password.encode(),
+                                                         )
+            logger.debug(f"token_pair = {token_pair}")
+            options = pa.flight.FlightCallOptions(headers=[token_pair])
 
         # Display session authentication info (if applicable)
         if flight_username or mtls:
             action = pyarrow.flight.Action("who-am-i", b"")
-            who_am_i_results = list(client.do_action(action=action))[0]
+            who_am_i_results = list(client.do_action(action=action, options=options))[0]
             authenticated_user = who_am_i_results.body.to_pybytes().decode()
             if authenticated_user:
                 logger.info(f"Authenticated to the Flight Server as user: {authenticated_user}")
@@ -201,9 +181,9 @@ def run_flight_client(host: str,
                             kwargs=arg_dict
                             )
         command_descriptor = pa.flight.FlightDescriptor.for_command(command=json.dumps(command_dict))
-
+        logger.info(msg=f"Command Descriptor: {command_descriptor}")
         # Read content of the dataset
-        flight = client.get_flight_info(command_descriptor)
+        flight = client.get_flight_info(command_descriptor, options)
         total_endpoints = 0
         total_chunks = 0
         total_rows = 0
@@ -216,7 +196,7 @@ def run_flight_client(host: str,
                        logger=logger.debug
                        ):
                 total_endpoints += 1
-                reader = client.do_get(endpoint.ticket)
+                reader = client.do_get(endpoint.ticket, options)
                 first_chunk_for_endpoint = True
                 for chunk in reader:
                     total_chunks += 1

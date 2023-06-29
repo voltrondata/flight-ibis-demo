@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import sys
@@ -15,27 +16,24 @@ import pyarrow.flight
 import pyarrow.parquet
 from OpenSSL import crypto
 from munch import Munch, munchify
+from pyarrow.flight import SchemaResult
 
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
+from .constants import LOCALHOST_IP_ADDRESS, LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME, MAX_THREADS, BEGINNING_OF_TIME, PYARROW_UNKNOWN, JWT_ISS, JWT_AUD
 from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, get_golden_rule_fact_batches
-from pyarrow.flight import SchemaResult
 
 
-# Constants
-LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
-LOCALHOST: str = "localhost"
-GRPC_TCP_SCHEME: str = "grpc+tcp"  # No TLS enabled...
-GRPC_TLS_SCHEME: str = "grpc+tls"
-MAX_THREADS: int = 11
-BEGINNING_OF_TIME: datetime = datetime(year=1775, month=11, day=10)
-END_OF_TIME: datetime = datetime(year=9999, month=12, day=25)  # Merry last Christmas!
-PYARROW_UNKNOWN: int = -1
-JWT_ISS = "Flight Ibis"
-JWT_AUD = "Flight Ibis"
+class BasicAuthServerMiddlewareFactory(pa.flight.ServerMiddlewareFactory):
+    """
+    Middleware that implements username-password authentication.
 
+    Parameters
+    ----------
+    creds: Dict[str, str]
+        A dictionary of username-password values to accept.
+    """
 
-class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
     @cached_property
     def class_name(self):
         return self.__class__.__name__
@@ -55,11 +53,33 @@ class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
         self.private_key = key
         self.logger = logger
 
-    def authenticate(self, outgoing, incoming):
-        username = incoming.read().decode()
-        password = incoming.read().decode()
+    def start_call(self, info, headers):
+        """Validate credentials at the start of every call."""
+        self.logger.debug(msg=f"{self.class_name}.start_call - called with args: {locals()}")
+        # Search for the authentication header (case-insensitive)
+        auth_header = None
+        for header in headers:
+            if header.lower() == "authorization":
+                auth_header = headers[header][0]
+                break
 
-        if username in self.creds and self.creds[username] == password:
+        if not auth_header:
+            raise pa.flight.FlightUnauthenticatedError("No credentials supplied")
+
+        # The header has the structure "AuthType TokenValue", e.g.
+        # "Basic <encoded username+password>" or "Bearer <random token>".
+        auth_type, _, value = auth_header.partition(" ")
+
+        if auth_type == "Basic":
+            # Initial "login". The user provided a username/password
+            # combination encoded in the same way as HTTP Basic Auth.
+            decoded = base64.b64decode(value).decode("utf-8")
+            username, _, password = decoded.partition(':')
+            if not password or password != self.creds.get(username):
+                error_message = f"{self.class_name}.start_call - invalid username/password"
+                self.logger.error(msg=error_message)
+                raise pa.flight.FlightUnauthenticatedError(error_message)
+
             # Create a JWT and sign it with our private key
             token = jwt.encode(payload=dict(jti=str(uuid.uuid4()),
                                             iss=JWT_ISS,
@@ -72,30 +92,53 @@ class TokenServerAuthHandler(pa.flight.ServerAuthHandler):
                                key=self.private_key,
                                algorithm="RS256"
                                )
-            outgoing.write(token.encode())
-            self.logger.info(msg=f"{self.class_name}.authenticate - User: '{username}' successfully authenticated - issued JWT.")
-        else:
-            error_message = f"{self.class_name}.authenticate - invalid username/password"
-            self.logger.error(msg=error_message)
-            raise pa.flight.FlightUnauthenticatedError(error_message)
+            self.logger.info(msg=f"{self.class_name}.start_call - User: '{username}' successfully authenticated - issued JWT.")
+            return BasicAuthServerMiddleware(token)
+        elif auth_type == "Bearer":
+            # An actual call. Validate the bearer token.
+            try:
+                decoded_jwt = jwt.decode(jwt=value,
+                                         key=self.public_key,
+                                         algorithms=["RS256"],
+                                         issuer=JWT_ISS,
+                                         audience=JWT_AUD
+                                         )
+            except Exception as e:
+                raise pa.flight.FlightUnauthenticatedError("Invalid token")
+            else:
+                subject = decoded_jwt.get("sub")
+                self.logger.debug(msg=f"{self.class_name}.start_call - JWT with subject: '{subject}' was successfully verified")
+                return BasicAuthServerMiddleware(value)
+
+        raise pa.flight.FlightUnauthenticatedError("No credentials supplied")
+
+
+class BasicAuthServerMiddleware(pa.flight.ServerMiddleware):
+    """Middleware that implements username-password authentication."""
+
+    def __init__(self, token):
+        self.token = token
+
+    def sending_headers(self):
+        """Return the authentication token to the client."""
+        return {"authorization": f"Bearer {self.token}"}
+
+
+class NoOpAuthHandler(pa.flight.ServerAuthHandler):
+    """
+    A handler that implements username-password authentication.
+
+    This is required only so that the server will respond to the internal
+    Handshake RPC call, which the client calls when authenticate_basic_token
+    is called. Otherwise, it should be a no-op as the actual authentication is
+    implemented in middleware.
+    """
+
+    def authenticate(self, outgoing, incoming):
+        pass
 
     def is_valid(self, token):
-        # Decode the jwt, validating the signature with the public key
-        try:
-            decoded_jwt = jwt.decode(jwt=token.decode(),
-                                     key=self.public_key,
-                                     algorithms=["RS256"],
-                                     issuer=JWT_ISS,
-                                     audience=JWT_AUD
-                                     )
-        except Exception as e:
-            error_message = f"{self.class_name}.is_valid - jwt.decode failed with Exception: {str(e)}"
-            self.logger.exception(msg=error_message)
-            raise pa.flight.FlightError(error_message)
-        else:
-            subject = decoded_jwt.get("sub")
-            self.logger.debug(msg=f"{self.class_name}.is_valid - JWT with subject: '{subject}' was successfully verified")
-            return subject.encode()
+        return ""
 
 
 class FlightServer(pa.flight.FlightServerBase):
@@ -114,6 +157,7 @@ class FlightServer(pa.flight.FlightServerBase):
                  verify_client=False,
                  root_certificates=None,
                  auth_handler=None,
+                 middleware=None,
                  log_level: str = None,
                  log_file: str = None,
                  log_file_mode: str = None
@@ -132,6 +176,7 @@ class FlightServer(pa.flight.FlightServerBase):
         super(FlightServer, self).__init__(
             location=host_uri,
             auth_handler=auth_handler,
+            middleware=middleware,
             tls_certificates=tls_certificates,
             verify_client=verify_client,
             root_certificates=root_certificates
@@ -166,13 +211,13 @@ class FlightServer(pa.flight.FlightServerBase):
     @cached_property
     def schema(self) -> pyarrow.Schema:
         return get_golden_rule_fact_batches(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
-                                             hash_bucket_num=99999,
-                                             total_hash_buckets=1,
-                                             min_date=BEGINNING_OF_TIME,
-                                             max_date=BEGINNING_OF_TIME,
-                                             schema_only=True,
-                                             existing_logger=self.logger
-                                             ).schema
+                                            hash_bucket_num=99999,
+                                            total_hash_buckets=1,
+                                            min_date=BEGINNING_OF_TIME,
+                                            max_date=BEGINNING_OF_TIME,
+                                            schema_only=True,
+                                            existing_logger=self.logger
+                                            ).schema
 
     def _make_flight_info(self, command_munch: Munch) -> pyarrow.flight.FlightInfo:
         self.logger.debug(msg=f"{self.class_name}._make_flight_info - was called with args: {locals()}")
@@ -282,7 +327,7 @@ class FlightServer(pa.flight.FlightServerBase):
 @click.option(
     "--location",
     type=str,
-    default=os.getenv("FLIGHT_LOCATION", f"{GRPC_TCP_SCHEME}://{LOCALHOST}:{os.getenv('FLIGHT_PORT', 8815)}"),
+    default=os.getenv("FLIGHT_LOCATION", f"{LOCALHOST}:{os.getenv('FLIGHT_PORT', 8815)}"),
     required=True,
     help=("Address or hostname for TLS and endpoint generation.  This is needed if running the Flight server behind a load balancer and/or "
           "a reverse proxy"
@@ -418,18 +463,21 @@ def run_flight_server(host: str,
                         )
 
     auth_handler = None
+    middleware = None
     if flight_username and flight_password:
         if not tls:
             raise RuntimeError("TLS must be enabled in order to use authentication, aborting.")
-        auth_handler = TokenServerAuthHandler(creds={flight_username: flight_password},
-                                              cert=tls_cert_chain,
-                                              key=tls_private_key,
-                                              logger=logger
-                                              )
+        auth_handler = NoOpAuthHandler()
+        middleware = dict(basic=BasicAuthServerMiddlewareFactory(creds={flight_username: flight_password},
+                                                                 cert=tls_cert_chain,
+                                                                 key=tls_private_key,
+                                                                 logger=logger
+                                                                 ))
 
     host_uri = f"{scheme}://{host}:{port}"
+    location_uri = f"{scheme}://{location}"
     server = FlightServer(host_uri=host_uri,
-                          location_uri=location,
+                          location_uri=location_uri,
                           database_file=Path(database_file),
                           duckdb_threads=duckdb_threads,
                           duckdb_memory_limit=duckdb_memory_limit,
@@ -438,6 +486,7 @@ def run_flight_server(host: str,
                           verify_client=verify_client,
                           root_certificates=root_certificates,
                           auth_handler=auth_handler,
+                          middleware=middleware,
                           log_level=log_level,
                           log_file=log_file,
                           log_file_mode=log_file_mode

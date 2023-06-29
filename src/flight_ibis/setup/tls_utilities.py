@@ -4,6 +4,9 @@ from pathlib import Path
 import click
 
 
+# Constants
+CERTIFICATE_VERSION: int = (3 - 1)
+
 TLS_DIR = Path("tls").resolve()
 
 
@@ -18,6 +21,7 @@ def _gen_openssl():
     subject = x509.get_subject()
     subject.commonName = socket.gethostname()
     x509.set_issuer(subject)
+    x509.set_version(CERTIFICATE_VERSION)
     x509.gmtime_adj_notBefore(0)
     x509.gmtime_adj_notAfter(5 * 365 * 24 * 60 * 60)
     x509.set_pubkey(pkey)
