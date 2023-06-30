@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from functools import cached_property
 from pathlib import Path
+from threading import BoundedSemaphore
 
 import click
 import duckdb
@@ -19,9 +20,12 @@ from munch import Munch, munchify
 from pyarrow.flight import SchemaResult
 
 from . import __version__ as flight_server_version
-from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT
-from .constants import LOCALHOST_IP_ADDRESS, LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME, MAX_THREADS, BEGINNING_OF_TIME, PYARROW_UNKNOWN, JWT_ISS, JWT_AUD
+from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, DEFAULT_FLIGHT_ENDPOINTS
+from .constants import LOCALHOST_IP_ADDRESS, LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME, BEGINNING_OF_TIME, PYARROW_UNKNOWN, JWT_ISS, JWT_AUD
 from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, get_golden_rule_fact_batches
+
+# Define a semaphore pool with 1 max thread to protect against multiple clients using the same ibis connection at the same time
+pool_sema = BoundedSemaphore(value=1)
 
 
 class BasicAuthServerMiddlewareFactory(pa.flight.ServerMiddlewareFactory):
@@ -149,6 +153,7 @@ class FlightServer(pa.flight.FlightServerBase):
     def __init__(self,
                  host_uri: str,
                  location_uri: str,
+                 max_endpoints: int,
                  database_file: Path,
                  duckdb_threads: int,
                  duckdb_memory_limit: str,
@@ -173,18 +178,11 @@ class FlightServer(pa.flight.FlightServerBase):
         if not database_file.exists():
             raise RuntimeError(f"The specified database file: '{database_file.as_posix()}' does not exist, aborting.")
 
-        super(FlightServer, self).__init__(
-            location=host_uri,
-            auth_handler=auth_handler,
-            middleware=middleware,
-            tls_certificates=tls_certificates,
-            verify_client=verify_client,
-            root_certificates=root_certificates
-        )
         self.flights = {}
         self.tls_certificates = tls_certificates
         self.host_uri = host_uri
         self.location_uri = location_uri
+        self.max_endpoints = max_endpoints
 
         # Get an Ibis DuckDB connection
         self.ibis_connection = ibis.duckdb.connect(database=database_file,
@@ -193,6 +191,17 @@ class FlightServer(pa.flight.FlightServerBase):
                                                    read_only=True
                                                    )
         self.customer_order_summary_expr = build_customer_order_summary_expr(conn=self.ibis_connection)
+
+        # Start the Flight RPC server now that the summary expression is built
+        super(FlightServer, self).__init__(
+            location=host_uri,
+            auth_handler=auth_handler,
+            middleware=middleware,
+            tls_certificates=tls_certificates,
+            verify_client=verify_client,
+            root_certificates=root_certificates
+        )
+
         self.golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=self.ibis_connection,
                                                                                customer_order_summary_expr=self.customer_order_summary_expr
                                                                                )
@@ -210,19 +219,25 @@ class FlightServer(pa.flight.FlightServerBase):
 
     @cached_property
     def schema(self) -> pyarrow.Schema:
-        return get_golden_rule_fact_batches(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
-                                            hash_bucket_num=99999,
-                                            total_hash_buckets=1,
-                                            min_date=BEGINNING_OF_TIME,
-                                            max_date=BEGINNING_OF_TIME,
-                                            schema_only=True,
-                                            existing_logger=self.logger
-                                            ).schema
+        self.logger.debug(msg=f"Attempting to acquire semaphore...")
+        with pool_sema:
+            self.logger.debug(msg=f"Semaphore successfully acquired...")
+            schema = get_golden_rule_fact_batches(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
+                                                  hash_bucket_num=99999,
+                                                  total_hash_buckets=1,
+                                                  min_date=BEGINNING_OF_TIME,
+                                                  max_date=BEGINNING_OF_TIME,
+                                                  schema_only=True,
+                                                  existing_logger=self.logger
+                                                  ).schema
+        self.logger.debug(msg=f"Semaphore released...")
+
+        return schema
 
     def _make_flight_info(self, command_munch: Munch) -> pyarrow.flight.FlightInfo:
         self.logger.debug(msg=f"{self.class_name}._make_flight_info - was called with args: {locals()}")
 
-        command_munch.kwargs.total_hash_buckets = min(MAX_THREADS, command_munch.kwargs.num_threads)
+        command_munch.kwargs.total_hash_buckets = min(self.max_endpoints, command_munch.kwargs.get("num_endpoints", self.max_endpoints))
 
         descriptor = pa.flight.FlightDescriptor.for_command(
             command=command_munch.command.encode('utf-8')
@@ -246,7 +261,7 @@ class FlightServer(pa.flight.FlightServerBase):
         command_munch: Munch = munchify(x=command)
 
         if command_munch.command != "get_golden_rule_facts":
-            error_message = f"{self.class_name}.do_get - Command: {command_munch.command} is not supported."
+            error_message = f"{self.class_name}._check_command - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
             raise pa.flight.FlightError(error_message)
         else:
@@ -274,7 +289,7 @@ class FlightServer(pa.flight.FlightServerBase):
                              )
             return flight_info
 
-    def get_schema(self, context, descriptor) -> pyarrow.Schema:
+    def get_schema(self, context, descriptor) -> SchemaResult:
         self.logger.info(msg=f"{self.class_name}.get_schema - was called with args: {locals()}")
         command = self._get_descriptor_command(descriptor=descriptor)
         _ = self._check_command(command=command)
@@ -301,7 +316,12 @@ class FlightServer(pa.flight.FlightServerBase):
                                       )
             self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
 
-            batch_reader = get_golden_rule_fact_batches(**golden_rule_kwargs)
+            self.logger.debug(msg=f"Attempting to acquire semaphore...")
+            with pool_sema:
+                self.logger.debug(msg=f"Semaphore successfully acquired...")
+                batch_reader = get_golden_rule_fact_batches(**golden_rule_kwargs)
+            self.logger.debug(msg=f"Semaphore released...")
+
         except Exception as e:
             error_message = f"{self.class_name}.get_flight_info - Exception: {str(e)}"
             self.logger.exception(msg=error_message)
@@ -340,6 +360,13 @@ class FlightServer(pa.flight.FlightServerBase):
     default=os.getenv("FLIGHT_PORT", 8815),
     required=True,
     help="Port number to listen on"
+)
+@click.option(
+    "--max-endpoints",
+    type=int,
+    default=os.getenv("MAX_FLIGHT_ENDPOINTS", DEFAULT_FLIGHT_ENDPOINTS),
+    required=True,
+    help="The maximum number of Flight end-points to produce for get_flight_info.  This is useful if running in Kubernetes with multiple replicas."
 )
 @click.option(
     "--database-file",
@@ -424,6 +451,7 @@ class FlightServer(pa.flight.FlightServerBase):
 def run_flight_server(host: str,
                       location: str,
                       port: int,
+                      max_endpoints: int,
                       database_file: str,
                       duckdb_threads: int,
                       duckdb_memory_limit: str,
@@ -479,6 +507,7 @@ def run_flight_server(host: str,
     location_uri = f"{scheme}://{location}"
     server = FlightServer(host_uri=host_uri,
                           location_uri=location_uri,
+                          max_endpoints=max_endpoints,
                           database_file=Path(database_file),
                           duckdb_threads=duckdb_threads,
                           duckdb_memory_limit=duckdb_memory_limit,

@@ -67,6 +67,8 @@ spec:
                   optional: false
             - name: LOG_LEVEL
               value: {{ .Values.FlightServerConfig.LOG_LEVEL | default "INFO" }}
+            - name: MAX_FLIGHT_ENDPOINTS
+              value: {{ .Values.replicaCount | quote }}
           volumeMounts:
             - mountPath: /opt/flight_ibis/tls
               readOnly: true

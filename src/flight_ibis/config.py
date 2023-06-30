@@ -11,9 +11,10 @@ DUCKDB_DB_FILE = DATA_DIR / "tpch.duckdb"
 DUCKDB_THREADS = 4
 DUCKDB_MEMORY_LIMIT = "4GB"
 TIMER_TEXT = "{name}: Elapsed time: {:.4f} seconds"
+DEFAULT_FLIGHT_ENDPOINTS: int = 1
 
 # Logging Constants
-LOGGING_FORMAT = '%(asctime)s - %(levelname)-8s %(message)s'
+LOGGING_FORMAT = "%(asctime)s - %(levelname)-8s %(message)s / Function: '%(funcName)s' / LineNo: %(lineno)d / Process: %(process)d - '%(processName)s' / Thread: %(thread)d - '%(threadName)s'"
 LOGGING_DATEFMT = '%Y-%m-%d %H:%M:%S %Z'
 LOGGING_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO"))
 BASIC_LOGGING_KWARGS = dict(format=LOGGING_FORMAT,

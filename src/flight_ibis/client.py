@@ -113,7 +113,7 @@ def run_flight_client(host: str,
                       log_file_mode: str,
                       from_date: datetime,
                       to_date: datetime,
-                      num_threads: int
+                      num_endpoints: int
                       ):
     logger = get_logger(filename=log_file,
                         filemode=log_file_mode,
@@ -173,7 +173,7 @@ def run_flight_client(host: str,
             if authenticated_user:
                 logger.info(f"Authenticated to the Flight Server as user: {authenticated_user}")
 
-        arg_dict = dict(num_threads=num_threads,
+        arg_dict = dict(num_endpoints=num_endpoints,
                         min_date=from_date.isoformat(),
                         max_date=to_date.isoformat()
                         )

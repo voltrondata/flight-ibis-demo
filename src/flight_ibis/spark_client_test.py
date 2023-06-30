@@ -115,7 +115,7 @@ def run_spark_flight_client(host: str,
                             log_file_mode: str,
                             from_date: datetime,
                             to_date: datetime,
-                            num_threads: int
+                            num_endpoints: int
                             ):
     logger = get_logger(filename=log_file,
                         filemode=log_file_mode,
@@ -167,7 +167,7 @@ def run_spark_flight_client(host: str,
         uri = f'{scheme}://{host}:{port}'
         logger.info(msg=f"Using Flight RPC Server URI: '{uri}'")
 
-        arg_dict = dict(num_threads=num_threads,
+        arg_dict = dict(num_endpoints=num_endpoints,
                         min_date=from_date.isoformat(),
                         max_date=to_date.isoformat()
                         )
