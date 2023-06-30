@@ -300,6 +300,7 @@ class FlightServer(pa.flight.FlightServerBase):
                                       existing_logger=self.logger
                                       )
             self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
+
             batch_reader = get_golden_rule_fact_batches(**golden_rule_kwargs)
         except Exception as e:
             error_message = f"{self.class_name}.get_flight_info - Exception: {str(e)}"

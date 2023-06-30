@@ -138,6 +138,7 @@ def get_golden_rule_fact_batches(golden_rules_ibis_expression: ibis.Expr,
                               f"{ibis.to_sql(expr=golden_rules_ibis_expression, params=expr_params)}"
                               )
                          )
+
             pyarrow_batches = (golden_rules_ibis_expression
                                .to_pyarrow_batches(params=expr_params
                                                    )
