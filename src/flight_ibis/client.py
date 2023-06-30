@@ -95,7 +95,7 @@ from .constants import LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME
     help="The to date to use for the data filter - in ISO format (example: 2020-11-01) - for 01-November-2020"
 )
 @click.option(
-    "--num-threads",
+    "--num-endpoints",
     type=int,
     default=11,
     required=True,
