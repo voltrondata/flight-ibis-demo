@@ -184,6 +184,8 @@ def run_flight_client(host: str,
         logger.info(msg=f"Command Descriptor: {command_descriptor}")
         # Read content of the dataset
         flight = client.get_flight_info(command_descriptor, options)
+
+        logger.debug(msg=f"Flight Schema: {flight.schema}")
         total_endpoints = 0
         total_chunks = 0
         total_rows = 0

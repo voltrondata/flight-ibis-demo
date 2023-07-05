@@ -22,7 +22,7 @@ from pyarrow.flight import SchemaResult
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, DEFAULT_FLIGHT_ENDPOINTS
 from .constants import LOCALHOST_IP_ADDRESS, LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME, BEGINNING_OF_TIME, PYARROW_UNKNOWN, JWT_ISS, JWT_AUD
-from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, get_golden_rule_fact_batches
+from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, execute_golden_rules
 
 # Define a semaphore pool with 1 max thread to protect against multiple clients using the same ibis connection at the same time
 pool_sema = BoundedSemaphore(value=1)
@@ -205,6 +205,7 @@ class FlightServer(pa.flight.FlightServerBase):
         self.golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=self.ibis_connection,
                                                                                customer_order_summary_expr=self.customer_order_summary_expr
                                                                                )
+        self.schema = self._get_schema()
 
         self.logger.info(f"Running Flight-Ibis server - version: {flight_server_version}")
         self.logger.info(f"Using Python version: {sys.version}")
@@ -217,20 +218,23 @@ class FlightServer(pa.flight.FlightServerBase):
         self.logger.info(f"   Memory Limit: {duckdb_memory_limit}")
         self.logger.info(f"Serving on {self.host_uri} (generated end-points will refer to location: {self.location_uri})")
 
-    @cached_property
-    def schema(self) -> pyarrow.Schema:
+    def _get_schema(self) -> pyarrow.Schema:
         self.logger.debug(msg=f"Attempting to acquire semaphore...")
         with pool_sema:
             self.logger.debug(msg=f"Semaphore successfully acquired...")
-            schema = get_golden_rule_fact_batches(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
-                                                  hash_bucket_num=99999,
-                                                  total_hash_buckets=1,
-                                                  min_date=BEGINNING_OF_TIME,
-                                                  max_date=BEGINNING_OF_TIME,
-                                                  schema_only=True,
-                                                  existing_logger=self.logger
-                                                  ).schema
+            reader = execute_golden_rules(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
+                                          hash_bucket_num=1,
+                                          total_hash_buckets=1,
+                                          min_date=BEGINNING_OF_TIME,
+                                          max_date=BEGINNING_OF_TIME,
+                                          existing_logger=self.logger
+                                          )
         self.logger.debug(msg=f"Semaphore released...")
+
+        # Just grab the first batch's schema
+        schema = reader.read_next_batch().schema
+
+        self.logger.debug(msg=f"Schema: {schema}")
 
         return schema
 
@@ -311,7 +315,6 @@ class FlightServer(pa.flight.FlightServerBase):
                                       total_hash_buckets=command_munch.kwargs.total_hash_buckets,
                                       min_date=datetime.fromisoformat(command_munch.kwargs.min_date),
                                       max_date=datetime.fromisoformat(command_munch.kwargs.max_date),
-                                      schema_only=False,
                                       existing_logger=self.logger
                                       )
             self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
@@ -319,7 +322,7 @@ class FlightServer(pa.flight.FlightServerBase):
             self.logger.debug(msg=f"Attempting to acquire semaphore...")
             with pool_sema:
                 self.logger.debug(msg=f"Semaphore successfully acquired...")
-                batch_reader = get_golden_rule_fact_batches(**golden_rule_kwargs)
+                batch_reader = execute_golden_rules(**golden_rule_kwargs)
             self.logger.debug(msg=f"Semaphore released...")
 
         except Exception as e:
@@ -328,7 +331,7 @@ class FlightServer(pa.flight.FlightServerBase):
             return pa.flight.FlightError(message=error_message)
         else:
             self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
-            return pyarrow.flight.GeneratorStream(schema=batch_reader.schema, generator=batch_reader)
+            return pyarrow.flight.GeneratorStream(schema=self.schema, generator=batch_reader)
 
     def do_action(self, context, action) -> list:
         self.logger.info(msg=f"{self.class_name}.do_action - was called with args: {locals()}")

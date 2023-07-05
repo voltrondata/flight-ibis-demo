@@ -14,9 +14,10 @@ TIMER_TEXT = "{name}: Elapsed time: {:.4f} seconds"
 DEFAULT_FLIGHT_ENDPOINTS: int = 1
 
 # Logging Constants
-LOGGING_FORMAT = "%(asctime)s - %(levelname)-8s %(message)s / Function: '%(funcName)s' / LineNo: %(lineno)d / Process: %(process)d - '%(processName)s' / Thread: %(thread)d - '%(threadName)s'"
 LOGGING_DATEFMT = '%Y-%m-%d %H:%M:%S %Z'
 LOGGING_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO"))
+LOGGING_FORMAT = "%(asctime)s - %(levelname)-8s %(message)s"
+EXTENDED_LOGGING_FORMAT = LOGGING_FORMAT + " / Function: '%(funcName)s' / LineNo: %(lineno)d / Process: %(process)d - '%(processName)s' / Thread: %(thread)d - '%(threadName)s'"
 BASIC_LOGGING_KWARGS = dict(format=LOGGING_FORMAT,
                             datefmt=LOGGING_DATEFMT,
                             level=LOGGING_LEVEL
@@ -33,7 +34,11 @@ def get_logger(filename: str = None,
     logger.setLevel(log_level)
 
     # Create a formatter for the log messages
-    formatter = logging.Formatter(fmt=LOGGING_FORMAT)
+    logging_format = LOGGING_FORMAT
+    if log_level == logging.DEBUG:
+        logging_format = EXTENDED_LOGGING_FORMAT
+
+    formatter = logging.Formatter(fmt=logging_format)
 
     # Create a stream handler to log to stdout
     console_handler = logging.StreamHandler()

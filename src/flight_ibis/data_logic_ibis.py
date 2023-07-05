@@ -1,7 +1,11 @@
+from typing import Dict
+
 import ibis
 from ibis import _
 from datetime import datetime
 import pyarrow
+from ibis.expr.types import Scalar
+
 from .config import DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, TIMER_TEXT, get_logger
 from codetiming import Timer
 
@@ -38,7 +42,8 @@ def build_customer_order_summary_expr(conn: ibis.BaseBackend) -> ibis.Expr:
 def build_golden_rules_ibis_expression(conn: ibis.BaseBackend,
                                        customer_order_summary_expr: ibis.Expr) -> ibis.Expr:
     orders = conn.table("orders").mutate(o_totalprice=_.o_totalprice.cast("double"))
-    lineitem = conn.table("lineitem").mutate(l_extendedprice=_.l_extendedprice.cast("double"),
+    lineitem = conn.table("lineitem").mutate(l_quantity=_.l_quantity.cast("double"),
+                                             l_extendedprice=_.l_extendedprice.cast("double"),
                                              l_discount=_.l_discount.cast("double"),
                                              l_tax=_.l_tax.cast("double")
                                              )
@@ -103,15 +108,28 @@ def build_golden_rules_ibis_expression(conn: ibis.BaseBackend,
     return golden_rule_facts_expr
 
 
-def get_golden_rule_fact_batches(golden_rules_ibis_expression: ibis.Expr,
-                                 hash_bucket_num: int,
-                                 total_hash_buckets: int,
-                                 min_date: datetime,
-                                 max_date: datetime,
-                                 schema_only: bool = False,
-                                 existing_logger=None,
-                                 log_file: str = None
-                                 ) -> pyarrow.RecordBatchReader:
+def build_param_map(hash_bucket_num: int,
+                    total_hash_buckets: int,
+                    min_date: datetime,
+                    max_date: datetime,
+                    existing_logger=None,
+                    log_file: str = None
+                    ):
+    return {p_hash_bucket_num: hash_bucket_num,
+            p_total_hash_buckets: total_hash_buckets,
+            p_min_date: min_date,
+            p_max_date: max_date
+            }
+
+
+def execute_golden_rules(golden_rules_ibis_expression: ibis.Expr,
+                         hash_bucket_num: int,
+                         total_hash_buckets: int,
+                         min_date: datetime,
+                         max_date: datetime,
+                         existing_logger=None,
+                         log_file: str = None
+                         ) -> pyarrow.RecordBatchReader:
     try:
         if existing_logger:
             logger = existing_logger
@@ -128,21 +146,20 @@ def get_golden_rule_fact_batches(golden_rules_ibis_expression: ibis.Expr,
                    initial_text=True,
                    logger=logger.debug
                    ):
-            expr_params = {p_hash_bucket_num: hash_bucket_num,
-                           p_total_hash_buckets: total_hash_buckets,
-                           p_min_date: min_date,
-                           p_max_date: max_date,
-                           p_schema_only: schema_only
-                           }
+            expr_params = build_param_map(hash_bucket_num=hash_bucket_num,
+                                          total_hash_buckets=total_hash_buckets,
+                                          min_date=min_date,
+                                          max_date=max_date
+                                          )
             logger.debug(msg=("SQL for Ibis Expression: golden_rules_ibis_expression: \n"
                               f"{ibis.to_sql(expr=golden_rules_ibis_expression, params=expr_params)}"
                               )
                          )
 
             pyarrow_batches = (golden_rules_ibis_expression
-                               .to_pyarrow_batches(params=expr_params
-                                                   )
-                               )
+                           .to_pyarrow_batches(params=expr_params
+                                               )
+                           )
 
         logger.debug(f"get_golden_rule_facts - successfully converted Ibis expression to PyArrow.")
 
@@ -178,13 +195,12 @@ if __name__ == '__main__':
                                                                           )
         for i in range(1, TOTAL_HASH_BUCKETS + 1):
             logger.info(msg=f"Bucket #: {i}")
-            reader = get_golden_rule_fact_batches(golden_rules_ibis_expression=golden_rules_ibis_expression,
-                                                  hash_bucket_num=i,
-                                                  total_hash_buckets=TOTAL_HASH_BUCKETS,
-                                                  min_date=datetime(year=1994, month=1, day=1),
-                                                  max_date=datetime(year=1997, month=12, day=31),
-                                                  schema_only=False,
-                                                  existing_logger=logger
-                                                  )
+            reader = execute_golden_rules(golden_rules_ibis_expression=golden_rules_ibis_expression,
+                                          hash_bucket_num=i,
+                                          total_hash_buckets=TOTAL_HASH_BUCKETS,
+                                          min_date=datetime(year=1994, month=1, day=1),
+                                          max_date=datetime(year=1997, month=12, day=31),
+                                          existing_logger=logger
+                                          )
             for chunk in reader:
                 logger.info(msg=chunk.to_pandas().head(n=10))
