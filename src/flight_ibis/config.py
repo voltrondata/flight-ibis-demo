@@ -17,7 +17,7 @@ DEFAULT_FLIGHT_ENDPOINTS: int = 1
 LOGGING_DATEFMT = '%Y-%m-%d %H:%M:%S %Z'
 LOGGING_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO"))
 LOGGING_FORMAT = "%(asctime)s - %(levelname)-8s %(message)s"
-EXTENDED_LOGGING_FORMAT = LOGGING_FORMAT + " / Function: '%(funcName)s' / LineNo: %(lineno)d / Process: %(process)d - '%(processName)s' / Thread: %(thread)d - '%(threadName)s'"
+EXTENDED_LOGGING_FORMAT = LOGGING_FORMAT + " / Module: '%(module)s' / Function: '%(funcName)s' / LineNo: %(lineno)d / Process: %(process)d - '%(processName)s' / Thread: %(thread)d - '%(threadName)s'"
 BASIC_LOGGING_KWARGS = dict(format=LOGGING_FORMAT,
                             datefmt=LOGGING_DATEFMT,
                             level=LOGGING_LEVEL

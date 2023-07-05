@@ -129,7 +129,7 @@ def execute_golden_rules(golden_rules_ibis_expression: ibis.Expr,
                          max_date: datetime,
                          existing_logger=None,
                          log_file: str = None
-                         ) -> pyarrow.RecordBatchReader:
+                         ) -> pyarrow.Table:
     try:
         if existing_logger:
             logger = existing_logger
@@ -157,9 +157,8 @@ def execute_golden_rules(golden_rules_ibis_expression: ibis.Expr,
                          )
 
             pyarrow_batches = (golden_rules_ibis_expression
-                           .to_pyarrow_batches(params=expr_params
-                                               )
-                           )
+                               .to_pyarrow(params=expr_params)
+                               )
 
         logger.debug(f"get_golden_rule_facts - successfully converted Ibis expression to PyArrow.")
 

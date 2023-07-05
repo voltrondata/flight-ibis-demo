@@ -222,17 +222,17 @@ class FlightServer(pa.flight.FlightServerBase):
         self.logger.debug(msg=f"Attempting to acquire semaphore...")
         with pool_sema:
             self.logger.debug(msg=f"Semaphore successfully acquired...")
-            reader = execute_golden_rules(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
-                                          hash_bucket_num=1,
-                                          total_hash_buckets=1,
-                                          min_date=BEGINNING_OF_TIME,
-                                          max_date=BEGINNING_OF_TIME,
-                                          existing_logger=self.logger
-                                          )
+            pyarrow_table = execute_golden_rules(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
+                                                 hash_bucket_num=1,
+                                                 total_hash_buckets=1,
+                                                 min_date=BEGINNING_OF_TIME,
+                                                 max_date=BEGINNING_OF_TIME,
+                                                 existing_logger=self.logger
+                                                 )
         self.logger.debug(msg=f"Semaphore released...")
 
         # Just grab the first batch's schema
-        schema = reader.read_next_batch().schema
+        schema = pyarrow_table.schema
 
         self.logger.debug(msg=f"Schema: {schema}")
 
@@ -322,7 +322,7 @@ class FlightServer(pa.flight.FlightServerBase):
             self.logger.debug(msg=f"Attempting to acquire semaphore...")
             with pool_sema:
                 self.logger.debug(msg=f"Semaphore successfully acquired...")
-                batch_reader = execute_golden_rules(**golden_rule_kwargs)
+                pyarrow_table = execute_golden_rules(**golden_rule_kwargs)
             self.logger.debug(msg=f"Semaphore released...")
 
         except Exception as e:
@@ -331,7 +331,7 @@ class FlightServer(pa.flight.FlightServerBase):
             return pa.flight.FlightError(message=error_message)
         else:
             self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
-            return pyarrow.flight.GeneratorStream(schema=self.schema, generator=batch_reader)
+            return pyarrow.flight.RecordBatchStream(data_source=pyarrow_table)
 
     def do_action(self, context, action) -> list:
         self.logger.info(msg=f"{self.class_name}.do_action - was called with args: {locals()}")
