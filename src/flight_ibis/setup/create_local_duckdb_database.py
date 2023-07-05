@@ -49,7 +49,6 @@ def create_local_duckdb_database(database_file: str,
         logger.info(msg=f"Creating DuckDB Database file: '{database_file_path.as_posix()}'")
 
         # Install the TPCH extension needed to generate the data...
-        conn.install_extension(extension="tpch")
         conn.load_extension(extension="tpch")
 
         # Generate the data
