@@ -1,4 +1,7 @@
 # Arrow Flight Ibis Server demo
+[<img src="https://img.shields.io/badge/GitHub-voltrondata%2Fflight--ibis--demo-blue.svg?logo=Github">](https://github.com/voltrondata/flight-ibis-demo)
+[<img src="https://img.shields.io/badge/dockerhub-image-green.svg?logo=Docker">](https://hub.docker.com/repository/docker/voltrondata/flight-ibis/general)
+[![flight-ibis-demo-ci](https://github.com/voltrondata/flight-ibis-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/voltrondata/flight-ibis-demo/actions/workflows/ci.yml)
 
 ## Setup (to run locally)
 
