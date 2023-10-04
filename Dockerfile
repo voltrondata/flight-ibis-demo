@@ -1,4 +1,4 @@
-FROM python:3.11.4
+FROM python:3.12
 
 ARG TARGETPLATFORM
 ARG TARGETARCH
@@ -72,6 +72,9 @@ RUN pip install . && \
 
 # Build the seed database
 RUN flight-data-bootstrap
+
+# Run a test to ensure that the server works...
+RUN scripts/test_flight_ibis.sh
 
 # Open Flight server port
 EXPOSE 8815
