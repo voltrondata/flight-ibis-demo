@@ -12,7 +12,7 @@ import click
 import duckdb
 import ibis
 import jwt
-import pyarrow as pa
+import pyarrow.compute
 import pyarrow.flight
 import pyarrow.parquet
 from OpenSSL import crypto
@@ -28,7 +28,7 @@ from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rul
 pool_sema = BoundedSemaphore(value=1)
 
 
-class BasicAuthServerMiddlewareFactory(pa.flight.ServerMiddlewareFactory):
+class BasicAuthServerMiddlewareFactory(pyarrow.flight.ServerMiddlewareFactory):
     """
     Middleware that implements username-password authentication.
 
@@ -68,7 +68,7 @@ class BasicAuthServerMiddlewareFactory(pa.flight.ServerMiddlewareFactory):
                 break
 
         if not auth_header:
-            raise pa.flight.FlightUnauthenticatedError("No credentials supplied")
+            raise pyarrow.flight.FlightUnauthenticatedError("No credentials supplied")
 
         # The header has the structure "AuthType TokenValue", e.g.
         # "Basic <encoded username+password>" or "Bearer <random token>".
@@ -82,7 +82,7 @@ class BasicAuthServerMiddlewareFactory(pa.flight.ServerMiddlewareFactory):
             if not password or password != self.creds.get(username):
                 error_message = f"{self.class_name}.start_call - invalid username/password"
                 self.logger.error(msg=error_message)
-                raise pa.flight.FlightUnauthenticatedError(error_message)
+                raise pyarrow.flight.FlightUnauthenticatedError(error_message)
 
             # Create a JWT and sign it with our private key
             token = jwt.encode(payload=dict(jti=str(uuid.uuid4()),
@@ -108,16 +108,16 @@ class BasicAuthServerMiddlewareFactory(pa.flight.ServerMiddlewareFactory):
                                          audience=JWT_AUD
                                          )
             except Exception as e:
-                raise pa.flight.FlightUnauthenticatedError("Invalid token")
+                raise pyarrow.flight.FlightUnauthenticatedError("Invalid token")
             else:
                 subject = decoded_jwt.get("sub")
                 self.logger.debug(msg=f"{self.class_name}.start_call - JWT with subject: '{subject}' was successfully verified")
                 return BasicAuthServerMiddleware(value)
 
-        raise pa.flight.FlightUnauthenticatedError("No credentials supplied")
+        raise pyarrow.flight.FlightUnauthenticatedError("No credentials supplied")
 
 
-class BasicAuthServerMiddleware(pa.flight.ServerMiddleware):
+class BasicAuthServerMiddleware(pyarrow.flight.ServerMiddleware):
     """Middleware that implements username-password authentication."""
 
     def __init__(self, token):
@@ -128,7 +128,7 @@ class BasicAuthServerMiddleware(pa.flight.ServerMiddleware):
         return {"authorization": f"Bearer {self.token}"}
 
 
-class NoOpAuthHandler(pa.flight.ServerAuthHandler):
+class NoOpAuthHandler(pyarrow.flight.ServerAuthHandler):
     """
     A handler that implements username-password authentication.
 
@@ -145,7 +145,7 @@ class NoOpAuthHandler(pa.flight.ServerAuthHandler):
         return ""
 
 
-class FlightServer(pa.flight.FlightServerBase):
+class FlightServer(pyarrow.flight.FlightServerBase):
     @cached_property
     def class_name(self):
         return self.__class__.__name__
@@ -205,23 +205,21 @@ class FlightServer(pa.flight.FlightServerBase):
         self.golden_rules_ibis_expression = build_golden_rules_ibis_expression(conn=self.ibis_connection,
                                                                                customer_order_summary_expr=self.customer_order_summary_expr
                                                                                )
-        self.schema = self._get_schema()
-
         self.logger.info(f"Running Flight-Ibis server - version: {flight_server_version}")
         self.logger.info(f"Using Python version: {sys.version}")
         self.logger.info(f"Using PyArrow version: {pyarrow.__version__}")
         self.logger.info(f"Using Ibis version: {ibis.__version__}")
         self.logger.info(f"Using DuckDB version: {duckdb.__version__}")
-        self.logger.info(f"Database details:")
+        self.logger.info("Database details:")
         self.logger.info(f"   Database file: {database_file.as_posix()}")
         self.logger.info(f"   Threads: {duckdb_threads}")
         self.logger.info(f"   Memory Limit: {duckdb_memory_limit}")
         self.logger.info(f"Serving on {self.host_uri} (generated end-points will refer to location: {self.location_uri})")
 
-    def _get_schema(self) -> pyarrow.Schema:
-        self.logger.debug(msg=f"Attempting to acquire semaphore...")
+    def _get_reference_dataset(self) -> pyarrow.Table:
+        self.logger.debug(msg="Attempting to acquire semaphore...")
         with pool_sema:
-            self.logger.debug(msg=f"Semaphore successfully acquired...")
+            self.logger.debug(msg="Semaphore successfully acquired...")
             pyarrow_table = execute_golden_rules(golden_rules_ibis_expression=self.golden_rules_ibis_expression,
                                                  hash_bucket_num=1,
                                                  total_hash_buckets=1,
@@ -229,31 +227,27 @@ class FlightServer(pa.flight.FlightServerBase):
                                                  max_date=BEGINNING_OF_TIME,
                                                  existing_logger=self.logger
                                                  )
-        self.logger.debug(msg=f"Semaphore released...")
+        self.logger.debug(msg="Semaphore released...")
 
-        # Just grab the first batch's schema
-        schema = pyarrow_table.schema
+        return pyarrow_table
 
-        self.logger.debug(msg=f"Schema: {schema}")
-
-        return schema
-
-    def _make_flight_info(self, command_munch: Munch) -> pyarrow.flight.FlightInfo:
+    def _make_flight_info(self, descriptor: pyarrow.flight.FlightDescriptor) -> pyarrow.flight.FlightInfo:
         self.logger.debug(msg=f"{self.class_name}._make_flight_info - was called with args: {locals()}")
 
+        command = self._get_descriptor_command(descriptor=descriptor)
+        command_munch = self._check_command(command=command)
         command_munch.kwargs.total_hash_buckets = min(self.max_endpoints, command_munch.kwargs.get("num_endpoints", self.max_endpoints))
 
-        descriptor = pa.flight.FlightDescriptor.for_command(
-            command=command_munch.command.encode('utf-8')
-        )
         self.logger.debug(msg=f"{self.class_name}._make_flight_info - descriptor: {descriptor}")
+
+        schema = self._get_schema(descriptor=descriptor)
 
         endpoints = []
         for i in range(1, (command_munch.kwargs.total_hash_buckets + 1)):
             command_munch.kwargs.hash_bucket_num = i
-            endpoints.append(pa.flight.FlightEndpoint(json.dumps(command_munch.toDict()), [self.location_uri]))
+            endpoints.append(pyarrow.flight.FlightEndpoint(json.dumps(command_munch.toDict()), [self.location_uri]))
 
-        return pyarrow.flight.FlightInfo(schema=self.schema,
+        return pyarrow.flight.FlightInfo(schema=schema,
                                          descriptor=descriptor,
                                          endpoints=endpoints,
                                          total_records=PYARROW_UNKNOWN,
@@ -267,43 +261,103 @@ class FlightServer(pa.flight.FlightServerBase):
         if command_munch.command != "get_golden_rule_facts":
             error_message = f"{self.class_name}._check_command - Command: {command_munch.command} is not supported."
             self.logger.error(msg=error_message)
-            raise pa.flight.FlightError(error_message)
+            raise RuntimeError(error_message)
         else:
             return command_munch
 
-    def _get_descriptor_command(self, descriptor) -> dict:
+    def _get_descriptor_command(self, descriptor: pyarrow.flight.FlightDescriptor) -> dict:
         self.logger.debug(msg=f"{self.class_name}._get_descriptor_command - was called with args: {locals()}")
-        return json.loads(descriptor.command.decode('utf-8'))
+        try:
+            command = json.loads(descriptor.command.decode('utf-8'))
+        except Exception as e:
+            self.logger.exception(msg=f"{self.class_name}._get_descriptor_command - failed with Exception: {str(e)}")
+            raise
+        else:
+            self.logger.debug(msg=f"{self.class_name}._get_descriptor_command - returning: {command}")
+            return command
 
-    def _get_ticket_command(self, ticket) -> dict:
+    def _get_ticket_command(self, ticket: pyarrow.flight.Ticket) -> dict:
         self.logger.debug(msg=f"{self.class_name}._get_ticket_command - was called with args: {locals()}")
-        return json.loads(ticket.ticket.decode('utf-8'))
+        command = json.loads(ticket.ticket.decode('utf-8'))
+        self.logger.debug(msg=f"{self.class_name}._get_ticket_command - returning: {command}")
+        return command
 
-    def get_flight_info(self, context, descriptor) -> pyarrow.flight.FlightInfo:
+    def get_flight_info(self, context: pyarrow.flight.ServerCallContext, descriptor: pyarrow.flight.FlightDescriptor) -> pyarrow.flight.FlightInfo:
         self.logger.info(msg=f"{self.class_name}.get_flight_info - was called with args: {locals()}")
-        command = self._get_descriptor_command(descriptor=descriptor)
-        command_munch = self._check_command(command=command)
-
-        if command_munch.command == "get_golden_rule_facts":
+        try:
             self.logger.info(msg=f"{self.class_name}.get_flight_info - called with context = {context}, descriptor = {descriptor}")
-            flight_info = self._make_flight_info(command_munch=command_munch)
+            flight_info = self._make_flight_info(descriptor=descriptor)
+        except Exception as e:
+            self.logger.exception(msg=(f"{self.class_name}.get_flight_info - with context = {context}, descriptor = {descriptor}"
+                                       f"- failed with exception: {str(e)}"
+                                       )
+                                  )
+            raise
+        else:
             self.logger.info(msg=(f"{self.class_name}.get_flight_info - with context = {context}, descriptor = {descriptor}"
                                   f"- returning: FlightInfo ({dict(schema=flight_info.schema, endpoints=flight_info.endpoints)})"
                                   )
                              )
             return flight_info
 
-    def get_schema(self, context, descriptor) -> SchemaResult:
-        self.logger.info(msg=f"{self.class_name}.get_schema - was called with args: {locals()}")
+    def _get_command_munch_from_descriptor(self, descriptor: pyarrow.flight.FlightDescriptor) -> Munch:
         command = self._get_descriptor_command(descriptor=descriptor)
-        _ = self._check_command(command=command)
+        command_munch = self._check_command(command=command)
+
+        return command_munch
+
+    def _get_schema(self, descriptor: pyarrow.flight.FlightDescriptor) -> pyarrow.Schema:
+        self.logger.debug(msg=f"{self.class_name}._get_schema - was called with args: {locals()}")
+        try:
+            reference_dataset = self._get_reference_dataset()
+            command_munch = self._get_command_munch_from_descriptor(descriptor=descriptor)
+
+            if hasattr(command_munch, "columns"):
+                schema = reference_dataset.select(command_munch.columns).schema
+            else:
+                schema = reference_dataset.schema
+
+        except Exception as e:
+            self.logger.exception(msg=(f"{self.class_name}._get_schema - failed with Exception: {str(e)}"))
+            raise
+        else:
+            self.logger.debug(msg=(f"{self.class_name}._get_schema - with descriptor = {descriptor}"
+                                   f"- returning: Schema ({dict(schema=schema)})"
+                                   )
+                              )
+
+            return schema
+
+    def get_schema(self, context: pyarrow.flight.ServerCallContext, descriptor: pyarrow.flight.FlightDescriptor) -> SchemaResult:
+        self.logger.info(msg=f"{self.class_name}.get_schema - was called with args: {locals()}")
+        schema = self._get_schema(descriptor=descriptor)
         self.logger.info(msg=(f"{self.class_name}.get_schema - with context = {context}, descriptor = {descriptor}"
-                              f"- returning: Schema ({dict(schema=self.schema)})"
+                              f"- returning: SchemaResult ({dict(schema=schema)})"
                               )
                          )
-        return SchemaResult(self.schema)
+        return SchemaResult(schema)
 
-    def do_get(self, context, ticket) -> pyarrow.flight.FlightDataStream:
+    def _build_filter_expression(self, filter_munch: Munch) -> pyarrow.compute.Expression:
+        self.logger.debug(msg=f"{self.class_name}._build_filter_expression - was called with args: {locals()}")
+
+        field = pyarrow.compute.field(filter_munch.column)
+
+        if filter_munch.operator == "=":
+            filter_expr = field == filter_munch.value
+        elif filter_munch.operator == "<":
+            filter_expr = field < filter_munch.value
+        elif filter_munch.operator == "<=":
+            filter_expr = field <= filter_munch.value
+        elif filter_munch.operator == ">":
+            filter_expr = field > filter_munch.value
+        elif filter_munch.operator == ">=":
+            filter_expr = field >= filter_munch.value
+        else:
+            filter_expr = None
+
+        return filter_expr
+
+    def do_get(self, context: pyarrow.flight.ServerCallContext, ticket: pyarrow.flight.Ticket) -> pyarrow.flight.FlightDataStream:
         self.logger.info(msg=f"{self.class_name}.do_get - was called with args: {locals()}")
 
         try:
@@ -319,21 +373,38 @@ class FlightServer(pa.flight.FlightServerBase):
                                       )
             self.logger.debug(msg=f"{self.class_name}.do_get - calling get_golden_rule_facts with args: {str(golden_rule_kwargs)}")
 
-            self.logger.debug(msg=f"Attempting to acquire semaphore...")
+            self.logger.debug(msg="Attempting to acquire semaphore...")
             with pool_sema:
-                self.logger.debug(msg=f"Semaphore successfully acquired...")
+                self.logger.debug(msg="Semaphore successfully acquired...")
                 pyarrow_table = execute_golden_rules(**golden_rule_kwargs)
-            self.logger.debug(msg=f"Semaphore released...")
+            self.logger.debug(msg="Semaphore released...")
+
+            if hasattr(command_munch, "filters"):
+                combined_filter_expr = None
+                for filter in command_munch.filters:
+                    filter_expr = self._build_filter_expression(filter_munch=filter)
+
+                    if isinstance(filter_expr, pyarrow.compute.Expression):
+                        if not combined_filter_expr:
+                            combined_filter_expr = filter_expr
+                        else:
+                            combined_filter_expr = combined_filter_expr & filter_expr
+
+                pyarrow_table = pyarrow_table.filter(combined_filter_expr)
+
+            if hasattr(command_munch, "columns"):
+                pyarrow_table = pyarrow_table.select(command_munch.columns)
 
         except Exception as e:
             error_message = f"{self.class_name}.get_flight_info - Exception: {str(e)}"
             self.logger.exception(msg=error_message)
-            return pa.flight.FlightError(message=error_message)
+            raise
         else:
-            self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader...")
+            self.logger.info(msg=f"{self.class_name}.do_get - context: {context} - ticket: {ticket} - returning a PyArrow RecordBatchReader with schema: {pyarrow_table.schema}")
+
             return pyarrow.flight.RecordBatchStream(data_source=pyarrow_table)
 
-    def do_action(self, context, action) -> list:
+    def do_action(self, context: pyarrow.flight.ServerCallContext, action: pyarrow.flight.Action) -> list:
         self.logger.info(msg=f"{self.class_name}.do_action - was called with args: {locals()}")
         if action.type == "who-am-i":
             return [context.peer_identity(), context.peer().encode("utf-8")]

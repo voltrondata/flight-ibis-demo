@@ -188,7 +188,11 @@ def run_spark_flight_client(host: str,
         )
         )
 
-        df.show(n=10)
+        (df
+         .select("l_shipdate", "o_custkey")
+         .where(df.o_custkey == 121717)
+         .show(n=10)
+         )
 
 
 if __name__ == '__main__':

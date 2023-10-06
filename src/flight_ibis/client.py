@@ -121,7 +121,7 @@ def run_flight_client(host: str,
                         log_level=getattr(logging, log_level.upper())
                         )
 
-    with Timer(name=f"Flight Client test",
+    with Timer(name="Flight Client test",
                text=TIMER_TEXT,
                initial_text=True,
                logger=logger.info
@@ -178,7 +178,13 @@ def run_flight_client(host: str,
                         max_date=to_date.isoformat()
                         )
         command_dict = dict(command="get_golden_rule_facts",
-                            kwargs=arg_dict
+                            kwargs=arg_dict,
+                            columns=["o_orderkey", "o_custkey"],
+                            filters=[{"column": "o_custkey",
+                                      "operator": "=",
+                                      "value": 121717
+                                      }
+                                     ]
                             )
         command_descriptor = pa.flight.FlightDescriptor.for_command(command=json.dumps(command_dict))
         logger.info(msg=f"Command Descriptor: {command_descriptor}")
@@ -199,16 +205,15 @@ def run_flight_client(host: str,
                        ):
                 total_endpoints += 1
                 reader = client.do_get(endpoint.ticket, options)
-                first_chunk_for_endpoint = True
                 for chunk in reader:
                     total_chunks += 1
                     data = chunk.data
-                    logger.debug(msg=f"Chunk size - rows: {data.num_rows} / bytes: {data.nbytes}")
-                    if first_chunk_for_endpoint:
+                    if data:
+                        logger.debug(msg=f"Chunk size - rows: {data.num_rows} / bytes: {data.nbytes}")
+                        logger.debug(msg=f"Endpoint: {endpoint} / Chunk: {total_chunks}")
                         logger.info(msg=data.to_pandas().head())
-                    total_rows += data.num_rows
-                    total_bytes += data.nbytes
-                    first_chunk_for_endpoint = False
+                        total_rows += data.num_rows
+                        total_bytes += data.nbytes
 
         logger.info(msg=f"Got {total_rows} rows total ({total_bytes} bytes) - from {total_endpoints} endpoints ({total_chunks} total chunks)")
 
