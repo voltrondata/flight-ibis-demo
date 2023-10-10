@@ -4,6 +4,7 @@ from datetime import datetime
 # Constants
 LOCALHOST_IP_ADDRESS: str = "0.0.0.0"
 LOCALHOST: str = "localhost"
+DEFAULT_FLIGHT_PORT: int = 8815
 GRPC_TCP_SCHEME: str = "grpc+tcp"  # No TLS enabled...
 GRPC_TLS_SCHEME: str = "grpc+tls"
 BEGINNING_OF_TIME: datetime = datetime(year=1994, month=1, day=1)

@@ -21,7 +21,7 @@ from pyarrow.flight import SchemaResult
 
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, DEFAULT_FLIGHT_ENDPOINTS
-from .constants import LOCALHOST_IP_ADDRESS, LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME, BEGINNING_OF_TIME, PYARROW_UNKNOWN, JWT_ISS, JWT_AUD
+from .constants import LOCALHOST_IP_ADDRESS, LOCALHOST, DEFAULT_FLIGHT_PORT, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME, BEGINNING_OF_TIME, PYARROW_UNKNOWN, JWT_ISS, JWT_AUD
 from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, execute_golden_rules
 
 # Define a semaphore pool with 1 max thread to protect against multiple clients using the same ibis connection at the same time
@@ -422,7 +422,7 @@ class FlightServer(pyarrow.flight.FlightServerBase):
 @click.option(
     "--location",
     type=str,
-    default=os.getenv("FLIGHT_LOCATION", f"{LOCALHOST}:{os.getenv('FLIGHT_PORT', 8815)}"),
+    default=os.getenv("FLIGHT_LOCATION", f"{LOCALHOST}:{os.getenv('FLIGHT_PORT', DEFAULT_FLIGHT_PORT)}"),
     required=True,
     help=("Address or hostname for TLS and endpoint generation.  This is needed if running the Flight server behind a load balancer and/or "
           "a reverse proxy"
@@ -431,7 +431,7 @@ class FlightServer(pyarrow.flight.FlightServerBase):
 @click.option(
     "--port",
     type=int,
-    default=os.getenv("FLIGHT_PORT", 8815),
+    default=os.getenv("FLIGHT_PORT", DEFAULT_FLIGHT_PORT),
     required=True,
     help="Port number to listen on"
 )

@@ -7,7 +7,7 @@ import logging
 import os
 from codetiming import Timer
 from .config import TIMER_TEXT, get_logger
-from .constants import LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME
+from .constants import LOCALHOST, DEFAULT_FLIGHT_PORT, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME
 
 
 @click.command()
@@ -20,7 +20,7 @@ from .constants import LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME
 @click.option(
     "--port",
     type=int,
-    default=8815,
+    default=DEFAULT_FLIGHT_PORT,
     help="Port number of the Flight server to connect to"
 )
 @click.option(
