@@ -60,7 +60,7 @@ resources:
     memory: 16Gi
 
 nodeSelector:
-  alpha.eksctl.io/nodegroup-name: graviton-cpu-node-group
+  eks.amazonaws.com/nodegroup: arm64-node-pool-20231002184408630400000022
 
 tolerations:
   - key: sidewinder
