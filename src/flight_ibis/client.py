@@ -215,7 +215,7 @@ def run_flight_client(host: str,
                         total_rows += data.num_rows
                         total_bytes += data.nbytes
 
-        logger.info(msg=f"Got {total_rows} rows total ({total_bytes} bytes) - from {total_endpoints} endpoints ({total_chunks} total chunks)")
+        logger.info(msg=f"Got {total_rows} rows total ({total_bytes} bytes) - from {total_endpoints} endpoint(s) ({total_chunks} total chunk(s))")
 
 
 if __name__ == '__main__':
