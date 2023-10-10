@@ -97,9 +97,9 @@ from .constants import LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME
 @click.option(
     "--num-endpoints",
     type=int,
-    default=11,
+    default=1,
     required=True,
-    help="The number of server threads to use for pulling data"
+    help="The number of endpoints to use for downloading the data - more endpoints mean smaller chunks of data (for reducing memory usage, etc.)"
 )
 def run_flight_client(host: str,
                       port: int,
