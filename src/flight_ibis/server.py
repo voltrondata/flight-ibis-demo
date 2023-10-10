@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from functools import cached_property
 from pathlib import Path
@@ -19,7 +20,6 @@ from OpenSSL import crypto
 from munch import Munch, munchify
 from pyarrow.flight import SchemaResult
 
-from copy import deepcopy
 from . import __version__ as flight_server_version
 from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, DEFAULT_FLIGHT_ENDPOINTS, LOGGING_REDACT_AUTHORIZATION_HEADER
 from .constants import LOCALHOST_IP_ADDRESS, LOCALHOST, DEFAULT_FLIGHT_PORT, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME, BEGINNING_OF_TIME, PYARROW_UNKNOWN, JWT_ISS, JWT_AUD
