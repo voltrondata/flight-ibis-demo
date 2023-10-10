@@ -23,6 +23,7 @@ BASIC_LOGGING_KWARGS = dict(format=LOGGING_FORMAT,
                             level=LOGGING_LEVEL
                             )
 STDOUT_LOGGING_KWARGS = dict(stream=sys.stdout)
+LOGGING_REDACT_AUTHORIZATION_HEADER = (os.getenv("LOGGING_REDACT_AUTHORIZATION_HEADER", "TRUE").upper() == "TRUE")
 
 
 def get_logger(filename: str = None,

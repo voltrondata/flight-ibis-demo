@@ -19,8 +19,9 @@ from OpenSSL import crypto
 from munch import Munch, munchify
 from pyarrow.flight import SchemaResult
 
+from copy import deepcopy
 from . import __version__ as flight_server_version
-from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, DEFAULT_FLIGHT_ENDPOINTS
+from .config import get_logger, logging, DUCKDB_DB_FILE, DUCKDB_THREADS, DUCKDB_MEMORY_LIMIT, DEFAULT_FLIGHT_ENDPOINTS, LOGGING_REDACT_AUTHORIZATION_HEADER
 from .constants import LOCALHOST_IP_ADDRESS, LOCALHOST, DEFAULT_FLIGHT_PORT, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME, BEGINNING_OF_TIME, PYARROW_UNKNOWN, JWT_ISS, JWT_AUD
 from .data_logic_ibis import build_customer_order_summary_expr, build_golden_rules_ibis_expression, execute_golden_rules
 
@@ -59,7 +60,11 @@ class BasicAuthServerMiddlewareFactory(pyarrow.flight.ServerMiddlewareFactory):
 
     def start_call(self, info, headers):
         """Validate credentials at the start of every call."""
-        self.logger.debug(msg=f"{self.class_name}.start_call - called with args: {locals()}")
+        logging_headers = deepcopy(headers)
+        if LOGGING_REDACT_AUTHORIZATION_HEADER:
+            logging_headers.update({"authorization": "<<redacted>>"})
+
+        self.logger.debug(msg=f"{self.class_name}.start_call - called with args: info={info}, headers={logging_headers}")
         # Search for the authentication header (case-insensitive)
         auth_header = None
         for header in headers:
