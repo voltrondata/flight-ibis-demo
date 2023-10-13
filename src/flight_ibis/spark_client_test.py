@@ -103,6 +103,20 @@ from .constants import LOCALHOST, GRPC_TCP_SCHEME, GRPC_TLS_SCHEME
     required=True,
     help="The number of server threads to use for pulling data"
 )
+@click.option(
+    "--custkey-filter-value",
+    type=int,
+    default=None,
+    required=False,
+    help="The value to use for the customer key filter - if None, then no filter will be applied"
+)
+@click.option(
+    "--requested-columns",
+    type=str,
+    default="*",
+    required=True,
+    help="A comma-separated list of columns to request from the server - example value: 'o_orderkey,o_custkey' - if '*', then all columns will be requested"
+)
 def run_spark_flight_client(host: str,
                             port: int,
                             tls: bool,
@@ -115,7 +129,9 @@ def run_spark_flight_client(host: str,
                             log_file_mode: str,
                             from_date: datetime,
                             to_date: datetime,
-                            num_endpoints: int
+                            num_endpoints: int,
+                            custkey_filter_value: int,
+                            requested_columns: str
                             ):
     logger = get_logger(filename=log_file,
                         filemode=log_file_mode,
@@ -123,7 +139,7 @@ def run_spark_flight_client(host: str,
                         log_level=getattr(logging, log_level.upper())
                         )
 
-    with Timer(name=f"Spark Flight Client test",
+    with Timer(name="Spark Flight Client test",
                text=TIMER_TEXT,
                initial_text=True,
                logger=logger.info
@@ -188,11 +204,15 @@ def run_spark_flight_client(host: str,
         )
         )
 
-        (df
-         .select("l_shipdate", "o_custkey")
-         .where(df.o_custkey == 121717)
-         .show(n=10)
-         )
+        # Apply filters if requested
+        if custkey_filter_value:
+            df = df.filter(df.o_custkey == custkey_filter_value)
+
+        # Select only the requested columns from the Flight RPC Server
+        df = df.select(requested_columns.split(","))
+
+        # Show the dataframe
+        df.show(n=10)
 
 
 if __name__ == '__main__':

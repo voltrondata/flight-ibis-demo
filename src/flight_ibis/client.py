@@ -101,6 +101,20 @@ from .constants import LOCALHOST, DEFAULT_FLIGHT_PORT, GRPC_TCP_SCHEME, GRPC_TLS
     required=True,
     help="The number of endpoints to use for downloading the data - more endpoints mean smaller chunks of data (for reducing memory usage, etc.)"
 )
+@click.option(
+    "--custkey-filter-value",
+    type=int,
+    default=None,
+    required=False,
+    help="The value to use for the customer key filter - if None, then no filter will be applied"
+)
+@click.option(
+    "--requested-columns",
+    type=str,
+    default="*",
+    required=True,
+    help="A comma-separated list of columns to request from the server - example value: 'o_orderkey,o_custkey' - if '*', then all columns will be requested"
+)
 def run_flight_client(host: str,
                       port: int,
                       tls: bool,
@@ -113,7 +127,9 @@ def run_flight_client(host: str,
                       log_file_mode: str,
                       from_date: datetime,
                       to_date: datetime,
-                      num_endpoints: int
+                      num_endpoints: int,
+                      custkey_filter_value: int,
+                      requested_columns: str
                       ):
     logger = get_logger(filename=log_file,
                         filemode=log_file_mode,
@@ -178,14 +194,18 @@ def run_flight_client(host: str,
                         max_date=to_date.isoformat()
                         )
         command_dict = dict(command="get_golden_rule_facts",
-                            kwargs=arg_dict,
-                            columns=["o_orderkey", "o_custkey"],
-                            filters=[{"column": "o_custkey",
-                                      "operator": "=",
-                                      "value": 121717
-                                      }
-                                     ]
+                            kwargs=arg_dict
                             )
+        if custkey_filter_value:
+            command_dict.update(filters=[{"column": "o_custkey",
+                                          "operator": "=",
+                                          "value": custkey_filter_value
+                                          }
+                                         ])
+
+        if requested_columns != "*":
+            command_dict.update(columns=requested_columns.split(","))
+
         command_descriptor = pa.flight.FlightDescriptor.for_command(command=json.dumps(command_dict))
         logger.info(msg=f"Command Descriptor: {command_descriptor}")
         # Read content of the dataset
