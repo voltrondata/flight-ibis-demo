@@ -102,7 +102,9 @@ class BasicAuthServerMiddlewareFactory(pyarrow.flight.ServerMiddlewareFactory):
                                algorithm="RS256"
                                )
             self.logger.info(msg=f"{self.class_name}.start_call - User: '{username}' successfully authenticated - issued JWT.")
-            return BasicAuthServerMiddleware(token)
+            return BasicAuthServerMiddleware(token=token,
+                                             username=username
+                                             )
         elif auth_type == "Bearer":
             # An actual call. Validate the bearer token.
             try:
@@ -117,7 +119,9 @@ class BasicAuthServerMiddlewareFactory(pyarrow.flight.ServerMiddlewareFactory):
             else:
                 subject = decoded_jwt.get("sub")
                 self.logger.debug(msg=f"{self.class_name}.start_call - JWT with subject: '{subject}' was successfully verified")
-                return BasicAuthServerMiddleware(value)
+                return BasicAuthServerMiddleware(token=value,
+                                                 username=subject
+                                                 )
 
         raise pyarrow.flight.FlightUnauthenticatedError("No credentials supplied")
 
@@ -125,12 +129,16 @@ class BasicAuthServerMiddlewareFactory(pyarrow.flight.ServerMiddlewareFactory):
 class BasicAuthServerMiddleware(pyarrow.flight.ServerMiddleware):
     """Middleware that implements username-password authentication."""
 
-    def __init__(self, token):
+    def __init__(self, token: str, username: str):
         self.token = token
+        self.username = username
 
     def sending_headers(self):
         """Return the authentication token to the client."""
         return {"authorization": f"Bearer {self.token}"}
+
+    def who_am_i(self):
+        return self.username
 
 
 class NoOpAuthHandler(pyarrow.flight.ServerAuthHandler):
@@ -412,7 +420,8 @@ class FlightServer(pyarrow.flight.FlightServerBase):
     def do_action(self, context: pyarrow.flight.ServerCallContext, action: pyarrow.flight.Action) -> list:
         self.logger.info(msg=f"{self.class_name}.do_action - was called with args: {locals()}")
         if action.type == "who-am-i":
-            return [context.peer_identity(), context.peer().encode("utf-8")]
+            self.logger.debug(msg=f"{self.class_name}.do_action - returning: {context.peer_identity()}")
+            return [context.get_middleware('basic').who_am_i().encode()]
         raise NotImplementedError
 
 
