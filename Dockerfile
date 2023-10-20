@@ -78,3 +78,6 @@ RUN scripts/test_flight_ibis.sh
 
 # Open Flight server port
 EXPOSE 8815
+
+# Define our entrypoint to start Flight Ibis server
+ENTRYPOINT scripts/start_flight_ibis_server.sh
