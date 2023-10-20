@@ -6,7 +6,7 @@ SCRIPT_DIR=$(dirname ${0})
 pushd "${SCRIPT_DIR}/.."
 if [ ! -f tls/server.crt ]
 then
-   echo -n "Generating TLS certs...\n"
+   echo "Generating TLS certs..."
    flight-create-tls-keypair
 fi
 popd
