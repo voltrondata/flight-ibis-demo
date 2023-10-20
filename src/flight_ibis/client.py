@@ -32,6 +32,13 @@ from .constants import LOCALHOST, DEFAULT_FLIGHT_PORT, GRPC_TCP_SCHEME, GRPC_TLS
     help="Connect to the server with tls"
 )
 @click.option(
+    "--tls-verify/--no-tls-verify",
+    type=bool,
+    default=(os.getenv("TLS_VERIFY", "TRUE").upper() == "TRUE"),
+    show_default=True,
+    help="Verify the server's TLS certificate hostname and signature.  Using --no-tls-verify is insecure, only use for development purposes!"
+)
+@click.option(
     "--tls-roots",
     type=str,
     default=None,
@@ -118,6 +125,7 @@ from .constants import LOCALHOST, DEFAULT_FLIGHT_PORT, GRPC_TCP_SCHEME, GRPC_TLS
 def run_flight_client(host: str,
                       port: int,
                       tls: bool,
+                      tls_verify: bool,
                       tls_roots: str,
                       mtls: list,
                       flight_username: str,
@@ -151,6 +159,10 @@ def run_flight_client(host: str,
         connection_args = {}
         if tls:
             scheme = GRPC_TLS_SCHEME
+            if not tls_verify:
+                connection_args["disable_server_verification"] = True
+                logger.warning("TLS verification is disabled, this is insecure, only use for development purposes!")
+
             if tls_roots:
                 with open(tls_roots, "rb") as root_certs:
                     connection_args["tls_root_certs"] = root_certs.read()
