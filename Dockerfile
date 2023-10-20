@@ -16,7 +16,9 @@ RUN apt-get update --yes && \
       screen \
       unzip \
       vim \
-      zip
+      zip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Setup the AWS Client
 WORKDIR /tmp
