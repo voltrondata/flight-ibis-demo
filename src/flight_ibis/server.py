@@ -1,4 +1,5 @@
 import base64
+import functools
 import json
 import os
 import sys
@@ -158,6 +159,29 @@ class NoOpAuthHandler(pyarrow.flight.ServerAuthHandler):
         return ""
 
 
+def debuggable(func):
+    """A decorator to enable GUI (i.e. PyCharm) debugging in the
+       decorated Arrow Flight RPC Server function.
+
+       See: https://github.com/apache/arrow/issues/36844
+       for more details...
+    """
+
+    @functools.wraps(func)
+    def wrapper_decorator(*args, **kwargs):
+        try:
+            import pydevd
+            pydevd.connected = True
+            pydevd.settrace(suspend=False)
+        except ImportError:
+            # Not running in debugger
+            pass
+        value = func(*args, **kwargs)
+        return value
+
+    return wrapper_decorator
+
+
 class FlightServer(pyarrow.flight.FlightServerBase):
     @cached_property
     def class_name(self):
@@ -295,6 +319,7 @@ class FlightServer(pyarrow.flight.FlightServerBase):
         self.logger.debug(msg=f"{self.class_name}._get_ticket_command - returning: {command}")
         return command
 
+    @debuggable
     def get_flight_info(self, context: pyarrow.flight.ServerCallContext, descriptor: pyarrow.flight.FlightDescriptor) -> pyarrow.flight.FlightInfo:
         self.logger.info(msg=f"{self.class_name}.get_flight_info - was called with args: {locals()}")
         try:
@@ -341,6 +366,7 @@ class FlightServer(pyarrow.flight.FlightServerBase):
 
             return schema
 
+    @debuggable
     def get_schema(self, context: pyarrow.flight.ServerCallContext, descriptor: pyarrow.flight.FlightDescriptor) -> SchemaResult:
         self.logger.info(msg=f"{self.class_name}.get_schema - was called with args: {locals()}")
         schema = self._get_schema(descriptor=descriptor)
@@ -370,6 +396,7 @@ class FlightServer(pyarrow.flight.FlightServerBase):
 
         return filter_expr
 
+    @debuggable
     def do_get(self, context: pyarrow.flight.ServerCallContext, ticket: pyarrow.flight.Ticket) -> pyarrow.flight.FlightDataStream:
         self.logger.info(msg=f"{self.class_name}.do_get - was called with args: {locals()}")
 
@@ -417,6 +444,7 @@ class FlightServer(pyarrow.flight.FlightServerBase):
 
             return pyarrow.flight.RecordBatchStream(data_source=pyarrow_table)
 
+    @debuggable
     def do_action(self, context: pyarrow.flight.ServerCallContext, action: pyarrow.flight.Action) -> list:
         self.logger.info(msg=f"{self.class_name}.do_action - was called with args: {locals()}")
         if action.type == "who-am-i":
