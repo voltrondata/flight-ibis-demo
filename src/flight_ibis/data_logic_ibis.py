@@ -30,7 +30,7 @@ def build_customer_order_summary_expr(conn: ibis.BaseBackend) -> ibis.Expr:
     customer_order_summary_expr = (orders
                                    .group_by(_.o_custkey)
                                    .aggregate(count_star=_.count())
-                                   .mutate(order_count_percent_rank=_.count_star.percent_rank()
+                                   .mutate(order_count_percent_rank=ibis.percent_rank()
                                            .over(ibis.window(order_by=_.count_star))
                                            )
                                    .filter(_.order_count_percent_rank <= MAX_PERCENT_RANK)
