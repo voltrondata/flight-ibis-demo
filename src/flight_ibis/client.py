@@ -194,7 +194,7 @@ def run_flight_client(host: str,
             options = pa.flight.FlightCallOptions(headers=[token_pair])
 
         # Display session authentication info (if applicable)
-        if flight_username or mtls:
+        if flight_username:
             action = pyarrow.flight.Action("who-am-i", b"")
             who_am_i_results = list(client.do_action(action=action, options=options))[0]
             authenticated_user = who_am_i_results.body.to_pybytes().decode()
